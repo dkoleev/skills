@@ -33,15 +33,19 @@ A live pane opened beside the Runner in the primary checkout to display overall 
 _Avoid_: Summary Pane, dashboard tab, log pane
 
 **Summary Pane**:
-A dedicated pane opened inside a task's tab beside the Worker and Reviewer when that task stays open for human approval or escalation.
+A dedicated pane opened inside a task's tab beside the Reviewer (or beside the Worker when review was skipped) when that task stays open for human approval or escalation.
 _Avoid_: Status Pane, report tab, output window
 
+**Review Gate**:
+The post-implementation checkpoint after a Worker's verified `ready` report that decides whether to launch an independent Reviewer or skip review for a trivial mechanical diff or under `--no-review`.
+_Avoid_: Approval Gate, skip check, complexity check
+
 **Approval Gate**:
-The policy checkpoint after review that determines whether a verified change may integrate automatically under project rules or must pause for explicit human approval.
+The policy checkpoint after review (or after Worker verification when review is skipped) that determines whether a verified change may integrate automatically under project rules or must pause for explicit human approval.
 _Avoid_: Merge check, risk flag, review gate
 
 **Run Record**:
-The durable per-task record owned by the Runner that tracks branch ownership, assigned harnesses, tokens, lifecycle phase, approval decisions, and reviewed revisions across restarts.
+The durable per-task record owned by the Runner that tracks branch ownership, assigned harnesses, tokens, lifecycle phase, review status, approval decisions, and verified revisions across restarts.
 _Avoid_: State file, checkpoint, metadata
 
 **Review Loop**:

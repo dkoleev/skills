@@ -32,7 +32,7 @@ Store ephemeral Worker/Reviewer runtime files inside each task worktree in:
 
 ## Runner Status Pane (`status.md`)
 
-Persist session-level state in `<git-common-dir>/implement-tasks/session.json` storing: `backend` (`"gui"` | `"tui"`), `mode` (`"auto"` | `"handle"`), `rules_file`, `rules_configured` (`true` | `false`), `primary_checkout`, `primary_branch`, `base_sha`, `status_pane_id`, `status_terminal_id`, and `throttled_harnesses`.
+Persist session-level state in `<git-common-dir>/implement-tasks/session.json` storing: `backend` (`"gui"` | `"tui"`), `mode` (`"auto"` | `"handle"`), `review_mode` (`"default"` | `"no-review"`), `rules_file`, `rules_configured` (`true` | `false`), `primary_checkout`, `primary_branch`, `base_sha`, `status_pane_id`, `status_terminal_id`, and `throttled_harnesses`.
 
 When at least one eligible or resumable task exists for the run, open or reuse the Runner's Status Pane without stealing focus:
 
@@ -51,13 +51,13 @@ When at least one eligible or resumable task exists for the run, open or reuse t
 
 If the user manually closes the Status Pane later, do not fail the run — keep updating `<git-common-dir>/implement-tasks/status.md` cleanly.
 
-Use **event-driven redraws** (never spawn a background `watch` loop): whenever queue or task state changes (dispatch, `ready`, review started, correction round increment, quota failover, `pass`, `awaiting approval`, `escalated`, `blocked`, auto-merged & cleaned, `needs attention`), rewrite `<git-common-dir>/implement-tasks/status.md` and run a single self-terminating clear + render command (`glow -p` -> `bat --paging=never --language=markdown` -> `cat` on POSIX or `Clear-Host` + `Get-Content -Raw` on PowerShell).
+Use **event-driven redraws** (never spawn a background `watch` loop): whenever queue or task state changes (dispatch, `ready`, `review skipped`, review started, correction round increment, quota failover, `pass`, `awaiting approval`, `escalated`, `blocked`, auto-merged & cleaned, `needs attention`), rewrite `<git-common-dir>/implement-tasks/status.md` and run a single self-terminating clear + render command (`glow -p` -> `bat --paging=never --language=markdown` -> `cat` on POSIX or `Clear-Host` + `Get-Content -Raw` on PowerShell).
 
 Include in `status.md`:
-- **Header:** integration mode (`risk-gated auto-merge` + rules file status, or `--handle`), primary branch, current pinned `base_sha`, active concurrency slots (`X/10`), last updated timestamp, and active/throttled harnesses in the pool.
-- **Queue Status Table:** `Task ID | Phase / Status | Harness / Model | Round | SHA | Notes / Next Action`.
+- **Header:** integration mode (`risk-gated auto-merge` + rules file status, or `--handle`), review mode (`default (auto-skip trivial)` or `--no-review`), primary branch, current pinned `base_sha`, active concurrency slots (`X/10`), last updated timestamp, and active/throttled harnesses in the pool.
+- **Queue Status Table:** `Task ID | Phase / Status | Harness / Model | Round | SHA | Notes / Next Action` (show `skipped (trivial)` or `skipped (--no-review)` in `Round` when review was skipped).
 - **Awaiting Human Approval (`approve <task-id>`):** each `awaiting approval` task with its Approval Gate reason, `summary-<task-id>` pane reference, archived `summary.md` link, and exact command (`approve <task-id>` or `approve all`).
-- **Completed & Auto-Merged:** for each merged task (whose workspace/worktree was cleaned up), list task ID, merge commit SHA, `Done` card commit SHA, concise summary of changes, verification results/gaps, and clickable absolute paths / `file://` links to its archived `summary.md`, screenshots, clips, and logs inside `<git-common-dir>/implement-tasks/<task-id>/`.
+- **Completed & Auto-Merged:** for each merged task (whose workspace/worktree was cleaned up), list task ID, review status (`reviewed` vs `review skipped: trivial` / `--no-review`), merge commit SHA, `Done` card commit SHA, concise summary of changes, verification results/gaps, and clickable absolute paths / `file://` links to its archived `summary.md`, screenshots, clips, and logs inside `<git-common-dir>/implement-tasks/<task-id>/`.
 - **Needs Attention / Skipped & Deferred:** unresolved `escalated` or failed-merge tasks with exact blockers, plus skipped/deferred tasks with reasons.
 
 ---
@@ -95,9 +95,12 @@ Include in `$worker_prompt`:
 
 Wait for the Worker's final `ready` report with matching task ID and `$impl_token`. Treat progress updates, intermediate commits, or a settled pane state (`idle`/`done`, especially for `agy` and `grok`) as still in progress. Verify that `git -C "$worktree_path" rev-parse HEAD` matches the reported SHA and `git -C "$worktree_path" status --porcelain` is clean (if the Worker could not commit due to a local hook/restriction, inspect and commit in `$worktree_path` as Runner before starting review).
 
-### Split Reviewer pane in Herdr GUI
+### Evaluate Review Gate & split Reviewer pane in Herdr GUI
 
-Split the Worker pane right in the same tab and worktree without stealing focus:
+After verifying the Worker's final `ready` report (token, clean worktree, matching `HEAD` SHA), inspect `git -C "$worktree_path" diff "$base_sha...$submitted_sha"` and evaluate the **Review Gate** per [auto-merge-rules.md](auto-merge-rules.md):
+
+- **If `--no-review` is set OR the verified diff satisfies the trivial-task skip criteria:** Do **not** split a Reviewer pane. Record `review_skipped: true`, `review_skip_reason` (`"no-review-flag"` or `"trivial: <reason>"`), keep `review_pane_id`, `review_terminal_id`, `reviewer_*`, and `reviewed_sha` as `null`, update `status.md`, evaluate `approval=auto|human` directly on `submitted_sha`, and proceed directly to **Archive evidence and open the Summary Pane**.
+- **Otherwise:** Split the Worker pane right in the same tab and worktree without stealing focus:
 
 ```sh
 herdr-app do pane.split '{"direction":"right","pane":"<worker_pane_id>","argv":[...]}'
@@ -127,20 +130,20 @@ The Reviewer persists `{ "task_id", "round", "latest_sha", "pending_exchange", "
 
 ### Archive evidence and open the Summary Pane (GUI)
 
-On `pass` or `escalated` (verified via completion line, `$review_token`, and SHA), **always archive before any auto-merge or worktree removal**:
+On `pass`, `escalated`, OR verified `ready` with `review_skipped == true` (verified via completion line, token, and SHA), **always archive before any auto-merge or worktree removal**:
 
-1. Copy `$worktree_path/.implement-tasks/$task_id/review-state.json` and only artifacts explicitly listed in the reports (validating each source path resolves inside `$worktree_path`) into `<git-common-dir>/implement-tasks/<task-id>/artifacts/`.
+1. Copy `$worktree_path/.implement-tasks/$task_id/review-state.json` (when review ran) and only artifacts explicitly listed in the reports (validating each source path resolves inside `$worktree_path`) into `<git-common-dir>/implement-tasks/<task-id>/artifacts/`.
 2. Write `<git-common-dir>/implement-tasks/<task-id>/summary.md` containing:
-   - Task ID, title, verdict (`PASS` or `ESCALATED`), and Approval Gate result (`auto` or `human`)
-   - Branch, `base..reviewed` SHA, Worker and Reviewer harnesses/models/efforts used, and total correction rounds
-   - **Why approval is needed** (included whenever `--handle`, `approval=human`, `escalated`, or merge failure applies — citing matched rules, sensitive paths, verification gaps, or reviewer reasoning)
+   - Task ID, title, verdict (`PASS`, `READY (REVIEW SKIPPED)`, or `ESCALATED`), and Approval Gate result (`auto` or `human`)
+   - Branch, `base..reviewed` SHA (or `base..submitted` SHA when review was skipped), Worker and Reviewer (if launched) harnesses/models/efforts used, and total correction rounds (or `Review skipped (<review_skip_reason>)`)
+   - **Why approval is needed** (included whenever `--handle`, `approval=human`, `escalated`, or merge failure applies — citing matched rules, sensitive paths, verification gaps, or Runner/Reviewer reasoning)
    - Concise summary of what changed and key touched files
    - Checks/tests executed, outcomes, and any verification gaps
-   - Review findings resolved (and, if `ESCALATED`, the unresolved issues, Worker position, and decision required)
+   - Review findings resolved (or `Review skipped (<review_skip_reason>)`; and, if `ESCALATED`, the unresolved issues, Worker position, and decision required)
    - Clickable absolute paths / `file://` links to archived screenshots, clips, logs, and reports inside `<git-common-dir>/implement-tasks/<task-id>/`
-3. **If auto-merge eligible** (`verdict=pass`, `approval=auto` from both Runner and Reviewer, project rules satisfied, and not `--handle`): Proceed directly to [integration](integration.md) to merge locally, verify, commit `Done`, clean up the task's space/terminals/worktree/branch, advance `base_sha`, and publish the merge summary + archived artifact links in the Runner's **Status Pane** (`status.md`). Do not open a task-tab Summary Pane when the workspace is auto-cleaned.
+3. **If auto-merge eligible** (`verdict=pass` with `approval=auto` from both Runner and Reviewer, OR verified `ready` with `review_skipped == true` and `approval=auto` from Runner; project rules configured and satisfied; zero verification gaps; and not `--handle`): Proceed directly to [integration](integration.md) to merge locally, verify, commit `Done`, clean up the task's space/terminals/worktree/branch, advance `base_sha`, and publish the merge summary + archived artifact links in the Runner's **Status Pane** (`status.md`). Do not open a task-tab Summary Pane when the workspace is auto-cleaned.
 4. **Whenever human approval or intervention is required** (`--handle`, `approval=human`, unconfigured rules safe fallback, `escalated`, or auto-merge failure/conflict):
-   - Inspect `herdr-app ls` to check layout and split from `$review_pane_id` (`right` when width allows 3 readable columns, otherwise `down`), launching the best available Markdown viewer inside `argv` so the pane stays open and readable without external installs:
+   - Inspect `herdr-app ls` to check layout and split from `$review_pane_id` when a Reviewer pane exists (`right` when width allows 3 readable columns, otherwise `down`), or split from `$worker_pane_id` (`right`, or `down` if narrow) when review was skipped, launching the best available Markdown viewer inside `argv` so the pane stays open and readable without external installs:
      - Prefer `glow -p "<summary_path>"` if `glow` is installed, else `bat --paging=never --language=markdown "<summary_path>"` if `bat` is installed, else print the file directly and keep the shell open (`["powershell", "-NoExit", "-NoLogo", "-Command", "Get-Content -Raw '<summary_path>'"]` on Windows, or `["sh", "-lc", "cat '<summary_path>'; exec sh"]` on POSIX).
    - Read `summary_pane_id` (`pane`) and `summary_terminal_id` (`terminal`) from the JSON response.
    - Rename the pane: `herdr-app do pane.rename '{"pane":"<summary_pane_id>","name":"summary-<task-id>"}'`.
@@ -158,15 +161,16 @@ When `HC_TERMINAL_ID` is unset and `HERDR_ENV=1`, use `herdr` CLI with `--no-foc
   herdr worktree create --cwd "$repo_root" --branch "$task_branch" --base "$base_sha" --label "$task_id" --no-focus
   ```
   If a worktree already exists on `$task_branch`, reopen with `herdr worktree open --cwd "$repo_root" --branch "$task_branch" --no-focus`.
-- Start and prompt Worker/Reviewer:
+- Start and prompt Worker/Reviewer (omit Reviewer `pane split` / `agent start` / `agent prompt` when the Review Gate yields `review_skipped == true`):
   ```sh
   herdr agent start "$worker_name" --kind "$worker_kind" --pane "$worker_pane" -- <native-flags...>
   herdr agent prompt "$worker_name" "$worker_prompt"
+  # Only when review_skipped == false:
   herdr pane split --pane "$worker_pane" --direction right --cwd "$worktree_path" --no-focus
   herdr agent start "$reviewer_name" --kind "$reviewer_kind" --pane "$review_pane" -- <native-flags...>
   herdr agent prompt "$reviewer_name" "$review_prompt"
   ```
-- Open Summary Pane (when staying open under `--handle`, `approval=human`, `escalated`, or merge failure): inspect `herdr pane layout --pane "$review_pane"`, split `--direction right` or `--direction down` with `--cwd "$worktree_path" --no-focus`, rename via `herdr pane rename "$summary_pane" "summary-$task_id"`, save `summary_pane_id` in `run.json`, and run `glow -p` / `bat` / `cat` or `Get-Content -Raw` inside `$summary_pane`.
+- Open Summary Pane (when staying open under `--handle`, `approval=human`, `escalated`, or merge failure): inspect `herdr pane layout` on `$review_pane` (or `$worker_pane` when `review_skipped == true`), split `--direction right` or `--direction down` with `--cwd "$worktree_path" --no-focus`, rename via `herdr pane rename "$summary_pane" "summary-$task_id"`, save `summary_pane_id` in `run.json`, and run `glow -p` / `bat` / `cat` or `Get-Content -Raw` inside `$summary_pane`.
 - Read agent output with `herdr agent get` and `herdr agent read <target> --source recent-unwrapped --lines 120` (fall back to `--source visible`).
 
 ---
@@ -181,6 +185,6 @@ IMPLEMENT_TASKS_REPORT task=<task-id> token=<token> role=<worker|reviewer> verdi
 
 Use `approval=auto` or `approval=human` when `role=reviewer` and `verdict=pass`; use `approval=none` otherwise. Use a distinct `$impl_token` for implementation and a separate `$review_token` for the review loop. Read agent output via `hc get` / `hc read --lines 120` (GUI) or `herdr agent get` / `herdr agent read --source recent-unwrapped --lines 120` (TUI). If output scrolled out of reach, instruct the agent to write its report inside `$worktree_path/.implement-tasks/$task-id/` and reply with the path.
 
-Persist a JSON Run Record per task in `<git-common-dir>/implement-tasks/<task-id>/run.json` storing: `task_id`, `task_card_path`, `backend` (`"gui"` | `"tui"`), `primary_checkout`, `primary_branch`, `base_sha`, `task_branch`, `worktree_path`, `workspace_id`, `space_id`, `tab_id`, `worker_pane_id`, `worker_terminal_id`, `worker_name`, `worker_harness`, `worker_model`, `worker_effort`, `review_pane_id`, `review_terminal_id`, `reviewer_name`, `reviewer_harness`, `reviewer_model`, `reviewer_effort`, `summary_pane_id`, `summary_terminal_id`, `impl_token`, `review_token`, `phase`, `submitted_sha`, `reviewed_sha`, `approval_gate`, `approval_reason`, `merge_sha`, and `done_commit_sha`.
+Persist a JSON Run Record per task in `<git-common-dir>/implement-tasks/<task-id>/run.json` storing: `task_id`, `task_card_path`, `backend` (`"gui"` | `"tui"`), `primary_checkout`, `primary_branch`, `base_sha`, `task_branch`, `worktree_path`, `workspace_id`, `space_id`, `tab_id`, `worker_pane_id`, `worker_terminal_id`, `worker_name`, `worker_harness`, `worker_model`, `worker_effort`, `review_skipped` (`true` | `false`), `review_skip_reason` (`"no-review-flag"` | `"trivial: <reason>"` | `null`), `review_pane_id`, `review_terminal_id`, `reviewer_name`, `reviewer_harness`, `reviewer_model`, `reviewer_effort`, `summary_pane_id`, `summary_terminal_id`, `impl_token`, `review_token`, `phase`, `submitted_sha`, `reviewed_sha`, `approval_gate`, `approval_reason`, `merge_sha`, and `done_commit_sha`. When `review_skipped` is `true`, Reviewer fields and `reviewed_sha` stay `null`, and integration targets `submitted_sha`.
 
 On restart, reconcile `<git-common-dir>/implement-tasks/session.json`, per-task `<git-common-dir>/implement-tasks/<task-id>/run.json`, Git worktree state, and `herdr-app ls` / `hc ls --json` (GUI) or `herdr agent list` / `herdr pane list` (TUI). Never claim an existing worktree automatically if no Run Record establishes ownership; report it to the user as an existing unowned checkout.

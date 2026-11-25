@@ -25,7 +25,7 @@ Never hardcode stale model names in prompts or scripts. Inspect live model catal
    - **Mechanical** (boilerplate, renames, small localized edits, docs/config): fast/economical model at `low` reasoning effort.
    - **Typical** (standard features, bug fixes, tests, single-module refactors): fast general-purpose model at `medium` reasoning effort.
    - **High-risk / architectural** (ambiguous requirements, concurrency, data migrations, security/auth, cross-cutting refactors): strongest available model at `high` reasoning effort.
-   Assess Worker and Reviewer risk independently and record the chosen harness, model, and effort in the Run Record and `summary.md`.
+   Assess Worker and Reviewer risk independently (when a Reviewer is launched) and record the chosen harness, model, and effort in the Run Record and `summary.md`.
 3. **Balance and respect subscription limits:**
    - Check available local usage clues when supported (for example `opencode stats --days 0 --models`) alongside explicit budget hints from the user (for example, conserving a primary subscription for high-risk tasks or reviews).
    - Spread concurrent work across enabled harnesses in the pool when multiple subscriptions are available instead of exhausting a single provider unnecessarily.
