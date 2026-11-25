@@ -1,4 +1,4 @@
-# Herdr Dispatch, Review Loop, Summary Pane, and Recovery
+# Herdr Dispatch, Status Pane, Review Loop, Summary Pane, and Recovery
 
 ## Select backend and prepare shared state
 
@@ -13,11 +13,12 @@ Discover the primary checkout root (`git rev-parse --show-toplevel`), current br
 git_common_dir="$(git rev-parse --path-format=absolute --git-common-dir)"
 ```
 
-Ensure `.implement-tasks/` is listed in "$git_common_dir/info/exclude" (create `info/` if missing, append `.implement-tasks/` once). Using `info/exclude` keeps ephemeral worktree files untracked across all linked worktrees without touching the project's committed `.gitignore`.
+Ensure `.implement-tasks/` is listed in `"$git_common_dir/info/exclude"` (create `info/` if missing, append `.implement-tasks/` once). Using `info/exclude` keeps ephemeral worktree files untracked across all linked worktrees without touching the project's committed `.gitignore`.
 
-Store durable Runner state, reports, `summary.md`, and archived artifacts in:
+Store durable Runner state, session state (`session.json`, `status.md`), Run Records (`run.json`), `summary.md`, and archived artifacts in:
 
 ```text
+<git-common-dir>/implement-tasks/
 <git-common-dir>/implement-tasks/<task-id>/
 ```
 
@@ -26,6 +27,38 @@ Store ephemeral Worker/Reviewer runtime files inside each task worktree in:
 ```text
 <worktreePath>/.implement-tasks/<task-id>/
 ```
+
+---
+
+## Runner Status Pane (`status.md`)
+
+Persist session-level state in `<git-common-dir>/implement-tasks/session.json` storing: `backend` (`"gui"` | `"tui"`), `mode` (`"auto"` | `"handle"`), `rules_file`, `rules_configured` (`true` | `false`), `primary_checkout`, `primary_branch`, `base_sha`, `status_pane_id`, `status_terminal_id`, and `throttled_harnesses`.
+
+When at least one eligible or resumable task exists for the run, open or reuse the Runner's Status Pane without stealing focus:
+
+- **Herdr GUI (`backend == "gui"`):**
+  1. Check whether `status_terminal_id` in `session.json` is still alive (`hc get "$status_terminal_id" --json`).
+  2. Otherwise locate the Runner's pane ID from `herdr-app ls` (matching `$HC_TERMINAL_ID`) and split right (`direction: "right"`, or `"down"` if the Runner pane is too narrow) with an interactive shell (`["powershell", "-NoLogo"]` on Windows, `["sh"]` on POSIX):
+     ```sh
+     herdr-app do pane.split '{"direction":"right","pane":"<runner_pane_id>","folder":"<repo_root>","argv":[...]}'
+     ```
+  3. Read `status_pane_id` (`pane`) and `status_terminal_id` (`terminal`) from the JSON response, rename via `herdr-app do pane.rename '{"pane":"<status_pane_id>","name":"implement-tasks-status"}'`, and save both IDs in `session.json`.
+  4. Redraw by sending a single self-terminating render command with `hc send "$status_terminal_id" "<clear-and-render-cmd>"`.
+- **Herdr TUI (`backend == "tui"`):**
+  1. Check whether `status_pane_id` in `session.json` still exists (`herdr pane get "$status_pane_id"`).
+  2. Otherwise inspect `herdr pane layout --current`, split `--current --direction right --cwd "$repo_root" --no-focus` (or `--direction down` if narrow), rename via `herdr pane rename "$status_pane" "implement-tasks-status"`, and save `status_pane_id` in `session.json`.
+  3. Redraw via `herdr pane run "$status_pane" "<clear-and-render-cmd>"`.
+
+If the user manually closes the Status Pane later, do not fail the run — keep updating `<git-common-dir>/implement-tasks/status.md` cleanly.
+
+Use **event-driven redraws** (never spawn a background `watch` loop): whenever queue or task state changes (dispatch, `ready`, review started, correction round increment, quota failover, `pass`, `awaiting approval`, `escalated`, `blocked`, auto-merged & cleaned, `needs attention`), rewrite `<git-common-dir>/implement-tasks/status.md` and run a single self-terminating clear + render command (`glow -p` -> `bat --paging=never --language=markdown` -> `cat` on POSIX or `Clear-Host` + `Get-Content -Raw` on PowerShell).
+
+Include in `status.md`:
+- **Header:** integration mode (`risk-gated auto-merge` + rules file status, or `--handle`), primary branch, current pinned `base_sha`, active concurrency slots (`X/10`), last updated timestamp, and active/throttled harnesses in the pool.
+- **Queue Status Table:** `Task ID | Phase / Status | Harness / Model | Round | SHA | Notes / Next Action`.
+- **Awaiting Human Approval (`approve <task-id>`):** each `awaiting approval` task with its Approval Gate reason, `summary-<task-id>` pane reference, archived `summary.md` link, and exact command (`approve <task-id>` or `approve all`).
+- **Completed & Auto-Merged:** for each merged task (whose workspace/worktree was cleaned up), list task ID, merge commit SHA, `Done` card commit SHA, concise summary of changes, verification results/gaps, and clickable absolute paths / `file://` links to its archived `summary.md`, screenshots, clips, and logs inside `<git-common-dir>/implement-tasks/<task-id>/`.
+- **Needs Attention / Skipped & Deferred:** unresolved `escalated` or failed-merge tasks with exact blockers, plus skipped/deferred tasks with reasons.
 
 ---
 
@@ -74,7 +107,7 @@ Note: `pane.split` uses the target pane's folder when omitted, which is `$worktr
 
 Wait for `$review_terminal_id` to reach `idle` via `hc get`/`hc wait`, then send `$review_prompt` via `hc send --if idle "$review_terminal_id" "$review_prompt"`.
 
-Pass the Reviewer `$base_sha`, `$submitted_sha`, task and acceptance criteria, verification evidence, `$worker_terminal_id` (`$worker_name`), `$worker_pane_id`, `$runner_terminal_id`, `$review_token`, the review-loop protocol, `$worktree_path/.implement-tasks/$task_id/review-state.json`, and the mandatory prompt guardrails.
+Pass the Reviewer `$base_sha`, `$submitted_sha`, task and acceptance criteria, verification evidence, `$worker_terminal_id` (`$worker_name`), `$worker_pane_id`, `$runner_terminal_id`, `$review_token`, `<repo-root>/.agents/implement-tasks-auto-merge.md` (if present), the review-loop protocol (including the `approval=auto|human` requirement), `$worktree_path/.implement-tasks/$task_id/review-state.json`, and the mandatory prompt guardrails.
 
 ### Run the review loop (GUI & TUI)
 
@@ -85,30 +118,33 @@ Give both Worker and Reviewer the task ID and the same `$review_token`. Every pe
 
 End the turn after sending so the peer can reply. If the peer is `working`, wait briefly before sending; if delivery times out, inspect status and recent output (`hc get` / `hc read --lines 120` in GUI; `herdr agent get` / `herdr agent read` in TUI) before retrying. Remember that in `hc`, while status is `working`, `blocked`, or `error`, `hc read` returns only the visible screen.
 
-1. The Reviewer inspects `git diff "$base_sha...$submitted_sha"` and the full task integration against repo standards and acceptance criteria. If actionable findings exist, it sends one consolidated correction request to the Worker with severity, `file:line`, and expected behavior. This opens numbered correction round `1` (initial review, duplicate retries, and final verdict do not count as rounds).
+1. The Reviewer inspects `git diff "$base_sha...$submitted_sha"` and the full task integration against repo standards, acceptance criteria, and [auto-merge rules](auto-merge-rules.md). If actionable findings exist, it sends one consolidated correction request to the Worker with severity, `file:line`, and expected behavior. This opens numbered correction round `1` (initial review, duplicate retries, and final verdict do not count as rounds).
 2. The Worker fixes agreed findings, runs relevant checks, commits in `$worktree_path`, and replies to the Reviewer with the new SHA and test evidence (or explains any disputed finding with evidence and the current SHA). Keep the same Reviewer conversation across rounds (unless a quota failover requires respawning).
 3. Allow at most **5 correction rounds**, including re-review of the 5th response. If issues still remain when a 6th round would be needed — or earlier if human judgment is required — stop before sending a 6th request and report `escalated` to the Runner with the latest SHA, unresolved findings (`file:line`), the Worker's position, attempted fixes, test evidence, and the exact decision needed.
+4. When passing (`verdict=pass`), the Reviewer sets `approval=auto` only if the diff is routine, verified without meaningful gaps, and satisfies `.agents/implement-tasks-auto-merge.md`; otherwise it sets `approval=human` and states the exact reason above the completion line.
 
 The Reviewer persists `{ "task_id", "round", "latest_sha", "pending_exchange", "verdict" }` in `$worktree_path/.implement-tasks/$task_id/review-state.json` so restarts never reset the 5-round cap.
 
 ### Archive evidence and open the Summary Pane (GUI)
 
-On `pass` or `escalated` (verified via completion line, `$review_token`, and SHA):
+On `pass` or `escalated` (verified via completion line, `$review_token`, and SHA), **always archive before any auto-merge or worktree removal**:
 
 1. Copy `$worktree_path/.implement-tasks/$task_id/review-state.json` and only artifacts explicitly listed in the reports (validating each source path resolves inside `$worktree_path`) into `<git-common-dir>/implement-tasks/<task-id>/artifacts/`.
 2. Write `<git-common-dir>/implement-tasks/<task-id>/summary.md` containing:
-   - Task ID, title, and verdict (`PASS` or `ESCALATED`)
+   - Task ID, title, verdict (`PASS` or `ESCALATED`), and Approval Gate result (`auto` or `human`)
    - Branch, `base..reviewed` SHA, Worker and Reviewer harnesses/models/efforts used, and total correction rounds
+   - **Why approval is needed** (included whenever `--handle`, `approval=human`, `escalated`, or merge failure applies — citing matched rules, sensitive paths, verification gaps, or reviewer reasoning)
    - Concise summary of what changed and key touched files
    - Checks/tests executed, outcomes, and any verification gaps
    - Review findings resolved (and, if `ESCALATED`, the unresolved issues, Worker position, and decision required)
    - Clickable absolute paths / `file://` links to archived screenshots, clips, logs, and reports inside `<git-common-dir>/implement-tasks/<task-id>/`
-3. Open a third pane in the same task tab beside the Worker and Reviewer (reuse `summary_pane_id` from the Run Record if recovering):
+3. **If auto-merge eligible** (`verdict=pass`, `approval=auto` from both Runner and Reviewer, project rules satisfied, and not `--handle`): Proceed directly to [integration](integration.md) to merge locally, verify, commit `Done`, clean up the task's space/terminals/worktree/branch, advance `base_sha`, and publish the merge summary + archived artifact links in the Runner's **Status Pane** (`status.md`). Do not open a task-tab Summary Pane when the workspace is auto-cleaned.
+4. **Whenever human approval or intervention is required** (`--handle`, `approval=human`, unconfigured rules safe fallback, `escalated`, or auto-merge failure/conflict):
    - Inspect `herdr-app ls` to check layout and split from `$review_pane_id` (`right` when width allows 3 readable columns, otherwise `down`), launching the best available Markdown viewer inside `argv` so the pane stays open and readable without external installs:
      - Prefer `glow -p "<summary_path>"` if `glow` is installed, else `bat --paging=never --language=markdown "<summary_path>"` if `bat` is installed, else print the file directly and keep the shell open (`["powershell", "-NoExit", "-NoLogo", "-Command", "Get-Content -Raw '<summary_path>'"]` on Windows, or `["sh", "-lc", "cat '<summary_path>'; exec sh"]` on POSIX).
    - Read `summary_pane_id` (`pane`) and `summary_terminal_id` (`terminal`) from the JSON response.
    - Rename the pane: `herdr-app do pane.rename '{"pane":"<summary_pane_id>","name":"summary-<task-id>"}'`.
-   - Save `summary_pane_id` and `summary_terminal_id` in the Run Record.
+   - Save `summary_pane_id`, `summary_terminal_id`, `approval_gate`, and `approval_reason` in `run.json`, refresh `status.md`, redraw the Runner's **Status Pane**, and notify the user explicitly in Runner chat (`TASK-12` needs `approve TASK-12` + reason + `summary-TASK-12`).
 
 ---
 
@@ -130,7 +166,7 @@ When `HC_TERMINAL_ID` is unset and `HERDR_ENV=1`, use `herdr` CLI with `--no-foc
   herdr agent start "$reviewer_name" --kind "$reviewer_kind" --pane "$review_pane" -- <native-flags...>
   herdr agent prompt "$reviewer_name" "$review_prompt"
   ```
-- Open Summary Pane: inspect `herdr pane layout --pane "$review_pane"`, split `--direction right` or `--direction down` with `--cwd "$worktree_path" --no-focus`, rename via `herdr pane rename "$summary_pane" "summary-$task_id"`, and run `glow -p` / `bat` / `cat` or `Get-Content -Raw` inside `$summary_pane`.
+- Open Summary Pane (when staying open under `--handle`, `approval=human`, `escalated`, or merge failure): inspect `herdr pane layout --pane "$review_pane"`, split `--direction right` or `--direction down` with `--cwd "$worktree_path" --no-focus`, rename via `herdr pane rename "$summary_pane" "summary-$task_id"`, save `summary_pane_id` in `run.json`, and run `glow -p` / `bat` / `cat` or `Get-Content -Raw` inside `$summary_pane`.
 - Read agent output with `herdr agent get` and `herdr agent read <target> --source recent-unwrapped --lines 120` (fall back to `--source visible`).
 
 ---
@@ -140,11 +176,11 @@ When `HC_TERMINAL_ID` is unset and `HERDR_ENV=1`, use `herdr` CLI with `--no-foc
 Require every Worker and Reviewer report to end with a structured completion line:
 
 ```text
-IMPLEMENT_TASKS_REPORT task=<task-id> token=<token> role=<worker|reviewer> verdict=<ready|pass|blocked|escalated> sha=<commit-sha|none>
+IMPLEMENT_TASKS_REPORT task=<task-id> token=<token> role=<worker|reviewer> verdict=<ready|pass|blocked|escalated> sha=<commit-sha|none> approval=<auto|human|none>
 ```
 
-Use a distinct `$impl_token` for implementation and a separate `$review_token` for the review loop. Read agent output via `hc get` / `hc read --lines 120` (GUI) or `herdr agent get` / `herdr agent read --source recent-unwrapped --lines 120` (TUI). If output scrolled out of reach, instruct the agent to write its report inside `$worktree_path/.implement-tasks/$task_id/` and reply with the path.
+Use `approval=auto` or `approval=human` when `role=reviewer` and `verdict=pass`; use `approval=none` otherwise. Use a distinct `$impl_token` for implementation and a separate `$review_token` for the review loop. Read agent output via `hc get` / `hc read --lines 120` (GUI) or `herdr agent get` / `herdr agent read --source recent-unwrapped --lines 120` (TUI). If output scrolled out of reach, instruct the agent to write its report inside `$worktree_path/.implement-tasks/$task-id/` and reply with the path.
 
-Persist a JSON Run Record per task in `<git-common-dir>/implement-tasks/<task-id>/run.json` storing: `task_id`, `task_card_path`, `backend` (`"gui"` | `"tui"`), `primary_checkout`, `primary_branch`, `base_sha`, `task_branch`, `worktree_path`, `workspace_id`, `space_id`, `tab_id`, `worker_pane_id`, `worker_terminal_id`, `worker_name`, `worker_harness`, `worker_model`, `worker_effort`, `review_pane_id`, `review_terminal_id`, `reviewer_name`, `reviewer_harness`, `reviewer_model`, `reviewer_effort`, `summary_pane_id`, `summary_terminal_id`, `impl_token`, `review_token`, `phase`, `submitted_sha`, and `reviewed_sha`.
+Persist a JSON Run Record per task in `<git-common-dir>/implement-tasks/<task-id>/run.json` storing: `task_id`, `task_card_path`, `backend` (`"gui"` | `"tui"`), `primary_checkout`, `primary_branch`, `base_sha`, `task_branch`, `worktree_path`, `workspace_id`, `space_id`, `tab_id`, `worker_pane_id`, `worker_terminal_id`, `worker_name`, `worker_harness`, `worker_model`, `worker_effort`, `review_pane_id`, `review_terminal_id`, `reviewer_name`, `reviewer_harness`, `reviewer_model`, `reviewer_effort`, `summary_pane_id`, `summary_terminal_id`, `impl_token`, `review_token`, `phase`, `submitted_sha`, `reviewed_sha`, `approval_gate`, `approval_reason`, `merge_sha`, and `done_commit_sha`.
 
-On restart, reconcile `<git-common-dir>/implement-tasks/<task-id>/run.json`, Git worktree state, and `herdr-app ls` / `hc ls --json` (GUI) or `herdr agent list` / `herdr pane list` (TUI). Never claim an existing worktree automatically if no Run Record establishes ownership; report it to the user as an existing unowned checkout.
+On restart, reconcile `<git-common-dir>/implement-tasks/session.json`, per-task `<git-common-dir>/implement-tasks/<task-id>/run.json`, Git worktree state, and `herdr-app ls` / `hc ls --json` (GUI) or `herdr agent list` / `herdr pane list` (TUI). Never claim an existing worktree automatically if no Run Record establishes ownership; report it to the user as an existing unowned checkout.

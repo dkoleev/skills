@@ -17,7 +17,7 @@ The system of record that holds queued tasks, statuses, dependencies, assignees,
 _Avoid_: Issue tracker, backlog tool, ticket board
 
 **Runner**:
-The coordinating agent session invoked by the user in the primary checkout to select queued tasks, choose models and harnesses, supervise progress, archive evidence, and integrate approved work.
+The coordinating agent session invoked by the user in the primary checkout to select queued tasks, choose models and harnesses, supervise progress, archive evidence, and integrate completed work.
 _Avoid_: Orchestrator, manager, main agent
 
 **Worker**:
@@ -28,12 +28,20 @@ _Avoid_: Implementer, coder, executor
 A fresh, independent agent instance assigned to evaluate a Worker's submitted commit against the task specification and repository standards.
 _Avoid_: Verifier, QA agent, auditor
 
+**Status Pane**:
+A live pane opened beside the Runner in the primary checkout to display overall queue progress, active task phases, assigned harnesses, pending approvals, and completed-task summaries with links to archived evidence.
+_Avoid_: Summary Pane, dashboard tab, log pane
+
 **Summary Pane**:
-A dedicated terminal pane opened beside the Worker and Reviewer after review finishes to present what changed, how it was tested, the review outcome, and links to evidence.
-_Avoid_: Report tab, output window, log pane
+A dedicated pane opened inside a task's tab beside the Worker and Reviewer when that task stays open for human approval or escalation.
+_Avoid_: Status Pane, report tab, output window
+
+**Approval Gate**:
+The policy checkpoint after review that determines whether a verified change may integrate automatically under project rules or must pause for explicit human approval.
+_Avoid_: Merge check, risk flag, review gate
 
 **Run Record**:
-The durable per-task record owned by the Runner that tracks branch ownership, assigned harnesses, tokens, lifecycle phase, and reviewed revisions across restarts.
+The durable per-task record owned by the Runner that tracks branch ownership, assigned harnesses, tokens, lifecycle phase, approval decisions, and reviewed revisions across restarts.
 _Avoid_: State file, checkpoint, metadata
 
 **Review Loop**:

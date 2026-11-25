@@ -40,7 +40,7 @@ On Windows, `codex`, `claude`, and `opencode` are commonly installed as npm `.ps
 
 - **In Herdr GUI (`herdr-app do space.new` / `pane.split`):** pass `argv` through PowerShell **without** `-NoProfile`, e.g.:
   ```json
-  ["powershell", "-NoLogo", "-Command", "codex -m gpt-6.2-sol -c 'model_reasoning_effort=\"medium\"' --dangerously-bypass-approvals-and-sandbox --no-daemon"]
+  ["powershell", "-NoLogo", "-Command", "codex -m <model> -c 'model_reasoning_effort=\"medium\"' --dangerously-bypass-approvals-and-sandbox --no-daemon"]
   ```
   (Use `pwsh` if preferred, or `powershell`.) Launching via PowerShell loads `$PROFILE` first, resolves `.ps1` shims cleanly, and starts the agent interactively inside `hc`.
 - **In Herdr TUI (`herdr agent start`):** if `herdr agent start` times out on a PowerShell function or `.ps1` shim, inspect the pane first. If at an interactive PowerShell prompt and `<kind>.ps1` exists, launch directly via `herdr pane run`:
