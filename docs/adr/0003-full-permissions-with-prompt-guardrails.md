@@ -13,5 +13,5 @@ Interactive tool-approval prompts stall parallel Workers and Reviewers across se
 
 ## Consequences
 
-- Every Worker and Reviewer prompt must include explicit boundary guardrails (stay inside `<worktreePath>`, never touch the primary checkout or `Backlog.md`, never run `git push`, never alter foreign Herdr panes/workspaces).
-- Integration into the primary branch and worktree deletion always require explicit per-task user approval tied to a verified commit SHA.
+- Every Worker and Reviewer prompt must include explicit boundary guardrails (stay inside `<worktreePath>`, never touch the primary checkout or `Backlog.md`, never run `git push`, never alter foreign Herdr spaces, workspaces, terminals, or panes).
+- Explicit per-task user merge approval tied to a verified commit SHA authorizes sequential merge, committing `Backlog.md` `Done`, and automatic cleanup of the merged task's Herdr space/terminals, Git worktree, and merged branch (unless the user explicitly asks to keep them open). Closing or discarding unmerged work and running `git push` still require separate explicit user authorization.

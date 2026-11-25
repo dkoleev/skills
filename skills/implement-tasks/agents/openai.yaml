@@ -1,7 +1,7 @@
 interface:
   display_name: "Implement Tasks"
   short_description: "Run, review, and summarize Backlog.md tasks in Herdr across harnesses"
-  default_prompt: "Use $implement-tasks to dispatch eligible In Progress Backlog.md tasks in Herdr."
+  default_prompt: "Use $implement-tasks to dispatch eligible To Do Backlog.md tasks (and resume active In Progress runs) in Herdr."
 
 policy:
   allow_implicit_invocation: false
