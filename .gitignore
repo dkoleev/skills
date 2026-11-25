@@ -1,0 +1,5 @@
+.agents/
+.claude/
+.grok/
+.zcode/
+skills-lock.json
