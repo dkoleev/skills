@@ -1,9 +1,15 @@
-# Auto-Merge, Review-Skip, and Approval Gate Rules
+# Auto-Merge, Review-Skip, Delivery, and Approval Gate Rules
 
 ## Why project rules live outside the skill folder
 
-- **Skill reference (`references/auto-merge-rules.md`):** Defines the **Review Gate** (trivial-task skip and `--no-review`), the **Approval Gate** risk-evaluation protocol, startup onboarding flow, conservative universal baseline, and copy-ready template.
+- **Skill reference (`references/auto-merge-rules.md`):** Defines **Delivery Mode** resolution (`local` vs `pr`), the **Review Gate** (trivial-task skip and `--no-review`), the **Approval Gate** risk-evaluation protocol, startup onboarding flow, conservative universal baseline, and copy-ready template.
 - **Project rules file (`<repo-root>/.agents/implement-tasks-auto-merge.md`, or an override path declared in `AGENTS.md` / `CLAUDE.md`):** Lives inside the target repository so `npx skills add` / `npx skills update` never overwrites project-specific rules and global skill installations never leak rules between projects.
+
+## Delivery Mode (`local` vs `pr`)
+
+- **`## Delivery Mode`** in `.agents/implement-tasks-auto-merge.md` (optional, defaults to `local`; overridable per run with `--pr` or `--local`):
+  - **`local`**: Tasks integrate locally via `git merge --no-ff --no-commit` in the primary checkout; `git push` is never executed automatically.
+  - **`pr`**: Worktrees branch from `origin/<primary_branch>` (`base_sha`), avoiding unpushed `Backlog.md` card commits in `<task_branch>`. After peer review passes (or is skipped), the Runner authorizes the Worker via `$ship_token` to push `<task_branch>` and open a GitHub PR (`gh pr create`). The Runner waits for PR checks (`gh pr checks --watch`) before merging (`gh pr merge` + `git pull --ff-only` + `Backlog.md` `Done` push) or pausing for `approve <task-id>`.
 
 ## Startup onboarding when project rules are missing or unfilled
 
@@ -37,14 +43,15 @@ After verifying the Worker's final `ready` report (matching token, clean worktre
 
 ## Approval Gate evaluation (Runner + Reviewer, or Runner alone when review skipped)
 
-- **When a Reviewer ran:** Both the **Runner** (evaluating task complexity, touched files/diff stat, verification gaps, and `.agents/implement-tasks-auto-merge.md`) and the **Reviewer** (inspecting `git diff "$base_sha...$reviewed_sha"` and emitting `approval=auto` or `approval=human` with a concrete reason) evaluate the Approval Gate. The strictest verdict wins.
-- **When review was skipped (trivial task or `--no-review`):** The **Runner alone** evaluates the Approval Gate directly from `git diff "$base_sha...$submitted_sha"`, verification evidence, and `.agents/implement-tasks-auto-merge.md`.
+- **When a Reviewer ran:** Both the **Runner** (evaluating task complexity, touched files/diff stat, verification gaps, CI status in `pr` mode, and `.agents/implement-tasks-auto-merge.md`) and the **Reviewer** (inspecting `git diff "$base_sha...$reviewed_sha"` and emitting `approval=auto` or `approval=human` with a concrete reason) evaluate the Approval Gate. The strictest verdict wins.
+- **When review was skipped (trivial task or `--no-review`):** The **Runner alone** evaluates the Approval Gate directly from `git diff "$base_sha...$submitted_sha"`, verification evidence, CI status in `pr` mode, and `.agents/implement-tasks-auto-merge.md`.
 
 ### Auto-merge + auto-cleanup allowed ONLY when ALL hold
 
 - Not running with `--handle`.
 - Project rules file (`<repo-root>/.agents/implement-tasks-auto-merge.md`) exists and is configured.
 - Task reached verified completion with zero verification gaps: either review verdict is `pass` with zero unresolved findings, OR review was skipped via the Review Gate (verified trivial diff or `--no-review`) with a clean verified Worker `ready` commit.
+- In `pr` delivery mode, the PR is open on `HEAD == reviewed_sha` (or `submitted_sha`) and GitHub Actions checks are green (`pass` or `no-checks`).
 - Task scope satisfies the project's `Auto-Merge Allowed` rules and touches no `Require Human Approve` rule or `Sensitive Paths & Domains`.
 - `approval=auto` holds (both Runner and Reviewer agree when reviewed; Runner evaluates `approval=auto` when review was skipped).
 
@@ -55,7 +62,7 @@ After verifying the Worker's final `ready` report (matching token, clean worktre
 - Task matches any `Require Human Approve` rule or touches `Sensitive Paths & Domains` in `.agents/implement-tasks-auto-merge.md`.
 - Task complexity is `high-risk/architectural`, or has meaningful verification gaps (for example, checks skipped, hardware/environment unavailable, or manual/visual inspection needed).
 - Approval Gate evaluates `approval=human`: flagged by the Reviewer when reviewed, or by the Runner when review was skipped (including `--no-review`) based on the diff (non-trivial architectural trade-offs, unexpected scope expansion, subtle compatibility risk, or unverified edge cases).
-- Review ended `escalated` or auto-merge encountered a conflict, overlapping primary edit, or combined-verification failure.
+- Review ended `escalated`, CI checks remain failing/errored in `pr` mode, or merge encountered a conflict or combined-verification failure.
 
 ---
 
@@ -65,6 +72,9 @@ Use this template when drafting `<repo-root>/.agents/implement-tasks-auto-merge.
 
 ```markdown
 # Implement Tasks — Auto-Merge Rules
+
+## Delivery Mode
+- `local` *(or `pr` to publish a GitHub Pull Request after review passes and gate merge on GitHub Actions checks; overridable per run with `--pr` / `--local`)*
 
 ## Auto-Merge Allowed
 - Mechanical or routine single-module changes (`mechanical` or low-risk `typical` complexity) with passing review (`pass`) — or verified review-skipped changes (trivial-task skip or `--no-review`) — and zero verification gaps.
@@ -86,8 +96,9 @@ Use this template when drafting `<repo-root>/.agents/implement-tasks-auto-merge.
 - User-facing UI/UX surfaces requiring human visual sign-off (customize paths for this project).
 
 ## Required Checks Before Auto-Merge
-- All task-relevant tests and linters must pass inside the task worktree AND against the combined state before merge commit.
+- All task-relevant tests and linters must pass inside the task worktree AND against the combined state (or GitHub Actions PR checks in `pr` mode) before merge commit.
 
 ## Notes
-- `git push` is never executed automatically; remote pushes always require separate explicit user authorization.
+- In `local` delivery mode, `git push` never runs automatically; pushing requires explicit user authorization.
+- In `pr` delivery mode, the Worker may push `<task_branch>` and open/update the PR only after receiving the Runner's post-review `$ship_token`, and the Runner merges/pulls on GitHub only when CI is green and the Approval Gate allows (`approval=auto` or explicit `approve <task-id>`).
 ```
