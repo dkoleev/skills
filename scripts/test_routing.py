@@ -158,6 +158,36 @@ class RoutingWorkflow(unittest.TestCase):
         self.assertEqual(decision['status'], 'queued')
         self.assertIn('no worker-eligible candidate', decision['reason'])
 
+    def test_editor_rejects_padded_ids_unsupported_efforts_and_duplicates(self):
+        self.start_editor()
+        form = self.request('state')
+        self.assertEqual(form['policy'], POLICY)
+        self.assertNotIn('xhigh', form['efforts']['codex'])
+        self.assertEqual(form['efforts']['opencode'], ['default'])
+        codex = {'harness': 'codex', 'model': 'gpt-test'}
+        config = form['config']
+        config['harnesses'] = ['codex']
+        rule = config['rules'][0]
+
+        def rejected(message):
+            with self.assertRaises(HTTPError) as error:
+                self.request('preview', form)
+            self.assertEqual(error.exception.code, 400)
+            self.assertIn(message, json.load(error.exception)['error'])
+
+        config['pool'] = [{'harness': 'codex', 'model': ' gpt-test '}]
+        rejected('model ID')
+        config['pool'] = [codex]
+        rule['candidates'] = [{**codex, 'effort': 'xhigh'}]
+        rejected('codex does not support xhigh')
+        rule['candidates'] = [{**codex, 'effort': 'high'}, {**codex, 'effort': 'high', 'role': 'both'}]
+        rejected('same candidate twice')
+        rule['candidates'][1]['role'] = 'reviewer'
+        self.request('save', form)
+        with self.assertRaises(HTTPError) as stale:
+            self.request('save', form)
+        self.assertEqual(stale.exception.code, 409)
+
     def test_pool_supports_catalog_custom_and_default_models(self):
         self.start_editor()
         form = self.request('state')

@@ -28,6 +28,7 @@ HEADING = '## Harness Pool & Routing'
 ASSETS = Path(__file__).with_name('routing_editor')
 HARNESSES = ('codex', 'claude', 'agy', 'kimi', 'opencode', 'crush', 'gemini', 'cursor', 'copilot', 'grok', 'pi')
 EFFORTS = ('default', 'low', 'medium', 'high', 'xhigh', 'max')
+HARNESS_EFFORTS = {'codex': EFFORTS[:4], 'opencode': EFFORTS[:1]}
 ROLES = ('both', 'worker', 'reviewer')
 
 
@@ -58,7 +59,15 @@ def line(value):
 
 
 def model_id(value):
-    return value is None or line(value)
+    return value is None or (line(value) and value == value.strip())
+
+
+def efforts(harness):
+    return HARNESS_EFFORTS.get(harness, EFFORTS)
+
+
+class Conflict(ValueError):
+    pass
 
 
 def validate(config):
@@ -83,12 +92,18 @@ def validate(config):
                 and all(line(part) for part in rule['description'].splitlines() if part.strip())
                 and bool(rule['description'].strip())
                 and isinstance(rule.get('candidates'), list), 'Each rule needs a name and task description.')
+        seen = set()
         for candidate in rule['candidates']:
             require(isinstance(candidate, dict) and line(candidate.get('harness'))
                     and 'model' in candidate and model_id(candidate['model'])
                     and (candidate['harness'], candidate['model']) in pool and candidate.get('effort') in EFFORTS
                     and candidate.get('role', 'both') in ROLES,
                     'Each candidate needs a pool model, supported effort, and eligible role.')
+            require(candidate['effort'] in efforts(candidate['harness']),
+                    f"{candidate['harness']} does not support {candidate['effort']} reasoning effort.")
+            key = (candidate['harness'], candidate['model'], candidate['effort'], candidate.get('role', 'both'))
+            require(key not in seen, f"Rule {rule['name']!r} lists the same candidate twice.")
+            seen.add(key)
     notes = config.get('launch_notes', {})
     require(isinstance(notes, dict) and isinstance(notes.get('project', ''), str)
             and isinstance(notes.get('harnesses', {}), dict), 'Invalid launch notes.')
@@ -281,8 +296,9 @@ class Project:
         config = decode_config(config) or default_config()
         families = {entry['model']: detected_family(entry['model']) for entry in config['pool'] if entry['model']}
         return {'project': self.root.name, 'config': config, 'families': families,
-                'revision': revision, 'harnesses': HARNESSES, 'efforts': EFFORTS,
-                'handwritten': handwritten}
+                'revision': revision, 'harnesses': HARNESSES,
+                'efforts': {harness: efforts(harness) for harness in HARNESSES},
+                'policy': self.policy.relative_to(self.root).as_posix(), 'handwritten': handwritten}
 
     def render(self, config, policy):
         has_bom = bool(policy and policy.startswith(b'\xef\xbb\xbf'))
@@ -310,7 +326,8 @@ class Project:
         with self.lock, repository_lock(self.lock_path):
             require(not self.stopping, 'The editor has stopped.')
             _, old_policy, revision = self.snapshot()
-            require(payload.get('revision') == revision, 'Project files changed. Reload the editor before saving.')
+            if payload.get('revision') != revision:
+                raise Conflict('Project files changed since the editor loaded them.')
             preview, updated = self.render(config, old_policy)
             if save:
                 encoded = (json.dumps(config, indent=2, ensure_ascii=False) + '\n').encode()
@@ -403,7 +420,7 @@ def serve(project, open_browser, background=False):
                 else:
                     self.respond_json(project.edit(payload, save=route == 'save'))
             except (OSError, ValueError) as error:
-                self.respond_json({'error': str(error)}, 400)
+                self.respond_json({'error': str(error)}, 409 if isinstance(error, Conflict) else 400)
 
         def log_message(self, *_):
             pass
