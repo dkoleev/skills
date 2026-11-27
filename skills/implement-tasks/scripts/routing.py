@@ -258,6 +258,7 @@ class Project:
         self.config = (root / CONFIG).resolve()
         self.policy = (root / policy).resolve()
         self.lock = threading.Lock()
+        self.stopping = False
         self.lock_path = git_dir / 'implement-tasks-routing.lock'
         require(self.config.is_relative_to(root) and self.policy.is_relative_to(root)
                 and self.config != self.policy, 'Choose a policy file inside the project.')
@@ -307,6 +308,7 @@ class Project:
         require(isinstance(payload, dict), 'Expected a routing form.')
         config = validate(payload.get('config'))
         with self.lock, repository_lock(self.lock_path):
+            require(not self.stopping, 'The editor has stopped.')
             _, old_policy, revision = self.snapshot()
             require(payload.get('revision') == revision, 'Project files changed. Reload the editor before saving.')
             preview, updated = self.render(config, old_policy)
@@ -325,7 +327,7 @@ class Project:
         return {'markdown': preview, 'revision': revision}
 
 
-def serve(project, open_browser):
+def serve(project, open_browser, background=False):
     prefix = '/' + secrets.token_urlsafe(24) + '/'
 
     class Editor(BaseHTTPRequestHandler):
@@ -355,9 +357,9 @@ def serve(project, open_browser):
             route = self.path[len(prefix):]
             if route == 'state':
                 try:
-                    self.respond_json(project.state())
+                    self.respond_json({**project.state(), 'background': background})
                 except (OSError, ValueError) as error:
-                    self.respond_json({'error': str(error)}, 400)
+                    self.respond_json({'error': str(error), 'background': background}, 400)
                 return
             if route.startswith('catalog/'):
                 harness = route.removeprefix('catalog/')
@@ -378,7 +380,8 @@ def serve(project, open_browser):
 
         def do_POST(self):
             route = self.path[len(prefix):]
-            if not self.authorized() or route not in ('preview', 'save', 'family'):
+            routes = ('preview', 'save', 'family', 'close') if background else ('preview', 'save', 'family')
+            if not self.authorized() or route not in routes:
                 self.send_error(404)
                 return
             try:
@@ -386,7 +389,14 @@ def serve(project, open_browser):
                 length = int(self.headers.get('Content-Length', '0'))
                 require(0 < length <= 1024 * 1024, 'Invalid form size.')
                 payload = json.loads(self.rfile.read(length))
-                if route == 'family':
+                if route == 'close':
+                    with project.lock:
+                        project.stopping = True
+                    try:
+                        self.respond_json({'closed': True})
+                    finally:
+                        self.server.shutdown()
+                elif route == 'family':
                     require(isinstance(payload, dict) and 'model' in payload and model_id(payload['model']),
                             'Expected a model ID.')
                     self.respond_json({'family': detected_family(payload['model'])})
@@ -409,12 +419,34 @@ def serve(project, open_browser):
             pass
 
 
+def open_editor(project, open_browser):
+    command = [sys.executable, str(Path(__file__).resolve()), '--policy', str(project.policy),
+               'edit', '--no-browser', '--background-server']
+    if os.name == 'nt':
+        detached = {'creationflags': subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP}
+    else:
+        detached = {'start_new_session': True}
+    child = subprocess.Popen(command, cwd=project.root, stdin=subprocess.DEVNULL,
+                             stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, **detached)
+    with child.stdout:
+        url = child.stdout.readline().strip()
+    if not url.startswith('http://127.0.0.1:'):
+        child.wait()
+        raise ValueError('The routing editor could not start.')
+    print(url, flush=True)
+    if open_browser:
+        webbrowser.open(url)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--policy', type=Path, default=POLICY, help='Project-relative Markdown policy path.')
     commands = parser.add_subparsers(dest='command', required=True)
     editor = commands.add_parser('edit', help='Open the local routing editor.')
     editor.add_argument('--no-browser', action='store_true', help='Print the editor URL for manual opening.')
+    editor.add_argument('--background-server', action='store_true', help=argparse.SUPPRESS)
+    opener = commands.add_parser('open', help='Open the local routing editor in the background.')
+    opener.add_argument('--no-browser', action='store_true', help='Print the editor URL for manual opening.')
     commands.add_parser('rules', help='Print settings as JSON, or null for legacy routing.')
     selector = commands.add_parser('select', help='Select a candidate from the first rule matching the task.')
     selector.add_argument('--matches', type=int, nargs='*', default=[], help='Matching rules by 1-based position.')
@@ -426,7 +458,9 @@ def main():
         root, git_dir = (Path(part).resolve() for part in os.fsdecode(result.stdout).splitlines())
         project = Project(root, arguments.policy, git_dir)
         if arguments.command == 'edit':
-            serve(project, not arguments.no_browser)
+            serve(project, not arguments.no_browser, arguments.background_server)
+        elif arguments.command == 'open':
+            open_editor(project, not arguments.no_browser)
         else:
             config = decode_config(read_bytes(project.config))
             result = config

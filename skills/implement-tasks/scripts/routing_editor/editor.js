@@ -3,6 +3,7 @@ const previewButton = document.querySelector('#preview-button');
 const saveButton = document.querySelector('#save-button');
 const status = document.querySelector('#status');
 const preview = document.querySelector('#preview');
+const stopEditor = document.querySelector('#stop-editor');
 const rules = document.querySelector('#rules');
 const addRule = document.querySelector('#add-rule');
 const pool = document.querySelector('#pool');
@@ -28,7 +29,7 @@ async function request(route, payload) {
   };
   const response = await fetch(route, options);
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error);
+  if (!response.ok) throw Object.assign(new Error(data.error), {data});
   return data;
 }
 
@@ -258,7 +259,7 @@ function renderRules(focus) {
 
 async function update(route) {
   if (!editor.reportValidity()) return;
-  previewButton.disabled = saveButton.disabled = editor.inert = true;
+  previewButton.disabled = saveButton.disabled = stopEditor.disabled = editor.inert = true;
   try {
     const data = await request(route, {config: state.config, revision: state.revision});
     preview.textContent = data.markdown;
@@ -268,9 +269,21 @@ async function update(route) {
   } catch (error) {
     showStatus(error.message, true);
   } finally {
-    previewButton.disabled = saveButton.disabled = editor.inert = false;
+    previewButton.disabled = saveButton.disabled = stopEditor.disabled = editor.inert = false;
   }
 }
+
+stopEditor.addEventListener('click', async () => {
+  stopEditor.disabled = editor.inert = true;
+  try {
+    await request('close', {});
+    stopEditor.hidden = document.querySelector('#workspace').hidden = true;
+    document.querySelector('#editor-stopped').hidden = false;
+  } catch (error) {
+    showStatus(error.message, true);
+    stopEditor.disabled = editor.inert = false;
+  }
+});
 
 previewButton.addEventListener('click', () => update('preview'));
 addHarness.addEventListener('click', () => {
@@ -294,6 +307,7 @@ editor.addEventListener('submit', event => {
 async function load() {
   try {
     state = await request('state');
+    stopEditor.hidden = !state.background;
     document.querySelector('#project').textContent = state.project;
     state.config.harnesses ??= [...new Set(state.config.pool.map(entry => entry.harness))];
     for (const [id, family] of Object.entries(state.families)) families.set(id, family);
@@ -310,6 +324,7 @@ async function load() {
     preview.textContent = data.markdown;
     previewButton.disabled = saveButton.disabled = addRule.disabled = false;
   } catch (error) {
+    if (error.data?.background) stopEditor.hidden = false;
     showStatus(error.message, true);
   }
 }

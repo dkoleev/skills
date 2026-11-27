@@ -9,9 +9,13 @@
 </head>
 <body>
   <header class="site-header">
-    <div class="shell"><span class="project" id="project"></span><h1>Harness Routing</h1></div>
+    <div class="shell header-content">
+      <div><span class="project" id="project"></span><h1>Harness Routing</h1></div>
+      <button type="button" id="stop-editor" hidden>Stop editor</button>
+    </div>
   </header>
-  <main class="shell workspace">
+  <p id="editor-stopped" class="shell" role="status" hidden>Editor stopped. You can close this tab.</p>
+  <main class="shell workspace" id="workspace">
     <form id="editor">
       <section class="pool-section" aria-labelledby="pool-title">
         <div class="section-heading">

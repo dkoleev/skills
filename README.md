@@ -99,13 +99,17 @@ Orchestrates an entire implementation queue from your primary Git checkout insid
 
 #### Local routing editor
 
-From the target Git repository, run this command in a normal terminal or a Herdr pane. Replace the directory placeholder with the installed `implement-tasks` skill directory. The editor uses Python 3.10+.
+From an agent session in the target Git repository, invoke `implement-tasks --configure`. In Codex, enter `$implement-tasks --configure`. The skill opens the local browser editor and returns its URL. Use **Stop editor** in the browser when you're done. The editor uses Python 3.10+.
+
+You can also launch the editor directly from a terminal. Replace the directory placeholder with the installed `implement-tasks` skill directory.
 
 ```sh
 python "<implement-tasks skill directory>/scripts/routing.py" edit
 ```
 
-Add a Harness to the pool, then add a model from its catalog, enter an exact ID, or use the Harness default. In each routing rule, assign pool models with their reasoning effort and eligible roles. Preview the Markdown and save. The editor reopens `.agents/implement-tasks-routing.json`, which the Runner reads when assigning work. The `Harness Pool & Routing` section of `.agents/implement-tasks-auto-merge.md` reflects the saved settings. For a project with a custom policy location, pass `--policy <path-from-project-root>` before `edit`. Press Ctrl+C in the terminal to stop the editor.
+For the direct terminal command, pass `--policy <path-from-project-root>` before `edit` if your project uses a custom policy file. Press Ctrl+C to stop the editor.
+
+Add a Harness to the pool, then add a model from its catalog, enter an exact ID, or use the Harness default. In each routing rule, assign pool models with their reasoning effort and eligible roles. Preview the Markdown and save. The editor reopens `.agents/implement-tasks-routing.json`, which the Runner reads when assigning work. The `Harness Pool & Routing` section of `.agents/implement-tasks-auto-merge.md` reflects the saved settings.
 
 On first use, a handwritten routing section appears beside the form. Transfer its policy into routing rules and the project-wide or per-Harness launch notes. Review the preview before saving the replacement section.
 

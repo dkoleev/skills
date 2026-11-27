@@ -1,10 +1,18 @@
 ---
 name: implement-tasks
-description: Orchestrate a project's Backlog.md implementation queue in Herdr GUI (hc + herdr-app) or Herdr TUI (herdr) across coding-agent harnesses (Codex, Claude Code, Antigravity, Kimi Code, OpenCode, and other Herdr agent kinds). Invoke explicitly to pick To Do tasks (and resume In Progress runs), move them to In Progress, dispatch them into isolated Git worktrees, evaluate a post-diff Review Gate (running independent two-axis peer-to-peer review while auto-skipping trivial mechanical diffs, or skipping all reviews with --no-review), optionally publish GitHub PRs and gate on CI (--pr / Delivery Mode), track live queue progress in a Runner Status Pane, and apply risk-gated auto-merge by default (or pause all tasks with --handle).
+description: Open the local routing editor with --configure or orchestrate a project's Backlog.md implementation queue in Herdr GUI (hc + herdr-app) or Herdr TUI (herdr). Invoke explicitly to dispatch eligible tasks into isolated Git worktrees, run the Review Gate, optionally publish GitHub PRs and gate on CI (--pr), and track progress through integration.
 disable-model-invocation: true
 ---
 
 # Implement Tasks
+
+## Configure routing
+
+For an explicit `--configure` invocation, open the editor before any queue setup. Use Python 3.10+ to run `python "<this skill directory>/scripts/routing.py" open` with the current project as the working directory. Resolve the script relative to this `SKILL.md`. For a custom policy declared by the project, pass `--policy <project-relative-path>` before `open`.
+
+The launcher starts the editor in the background, opens the browser and prints its loopback URL. Return the printed URL and tell the user they can use **Stop editor** to shut it down. End this invocation there. Configuration can run from any local agent session in the Git project.
+
+## Run the task queue
 
 Use this skill explicitly from the primary Git checkout inside a **Herdr GUI** session (`HC_TERMINAL_ID`, via `herdr-app` + `hc`) or a **Herdr TUI** session (`HERDR_ENV=1`, via `herdr`) from any supported coding-agent harness pane. Move eligible tasks to **To Do** in `Backlog.md`, then invoke `implement-tasks` (with optional task IDs, harness pool hints, subscription-limit preferences, `--handle`, `--no-review`, `--pr`, or `--local`).
 

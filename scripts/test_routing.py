@@ -4,10 +4,11 @@ import json
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 
@@ -47,6 +48,32 @@ class RoutingWorkflow(unittest.TestCase):
 
     def test_legacy_projects_report_missing_structured_configuration(self):
         self.assertIsNone(json.loads(self.command('rules', check=True).stdout))
+
+    def test_background_editor_outlives_launcher_and_can_be_closed(self):
+        launcher = self.command('open', '--no-browser', check=True, timeout=10)
+        self.url = launcher.stdout.strip()
+        self.assertTrue(self.url.startswith('http://127.0.0.1:'))
+        try:
+            state = self.request('state')
+            self.assertTrue(state['background'])
+            self.assertEqual(state['project'], self.repo.name)
+            settings = self.policy.with_name('implement-tasks-routing.json')
+            settings.write_text('{', encoding='utf-8')
+            with self.assertRaises(HTTPError) as rejected:
+                self.request('state')
+            self.assertTrue(json.load(rejected.exception)['background'])
+        finally:
+            self.assertEqual(self.request('close', {}), {'closed': True})
+        deadline = time.monotonic() + 3
+        while time.monotonic() < deadline:
+            try:
+                self.request('state')
+            except (URLError, ConnectionError, TimeoutError):
+                break
+            time.sleep(0.05)
+        else:
+            self.fail('Background editor kept listening after close.')
+        self.assertFalse(self.policy.exists())
 
     def test_two_editors_reject_a_stale_concurrent_save(self):
         self.start_editor()
