@@ -29,7 +29,7 @@ A fresh, independent agent instance assigned to evaluate a Worker's submitted co
 _Avoid_: Verifier, QA agent, auditor
 
 **Status Pane**:
-A live pane opened beside the Runner in the primary checkout to display overall queue progress, active task phases, assigned harnesses, pending approvals, and completed-task summaries with links to archived evidence.
+A live pane opened beside the Runner in the primary checkout to display overall queue progress, active task phases, assigned harnesses, pending approvals, PR links and CI status in PR delivery mode, and completed-task summaries with links to archived evidence.
 _Avoid_: Summary Pane, dashboard tab, log pane
 
 **Summary Pane**:
@@ -41,7 +41,7 @@ The post-implementation checkpoint after a Worker's verified `ready` report that
 _Avoid_: Approval Gate, skip check, complexity check
 
 **Approval Gate**:
-The policy checkpoint after review (or after Worker verification when review is skipped) that determines whether a verified change may integrate automatically under project rules or must pause for explicit human approval.
+The policy checkpoint after review (or after Worker verification when review is skipped), and following green PR checks in PR delivery mode, that determines whether a verified change may integrate automatically under project rules or must pause for explicit human approval.
 _Avoid_: Merge check, risk flag, review gate
 
 **Run Record**:
@@ -55,3 +55,15 @@ _Avoid_: Feedback cycle, fix loop, chat loop
 **Correction Round**:
 A single numbered iteration within a Review Loop consisting of one consolidated critique from the Reviewer and the Worker's corresponding response or fix commit.
 _Avoid_: Turn, attempt, retry
+
+**Delivery Mode**:
+The dispatch and integration pathway (`local` or `pr`) that defines how task worktrees branch, publish changes, gate on verification, and incorporate approved commits into the primary branch.
+_Avoid_: Merge mode, branch strategy, transport
+
+**PR Delivery**:
+The remote integration pathway (`pr`) in which task worktrees branch cleanly from `origin/<primary_branch>`, publish a GitHub Pull Request after verified review via a `$ship_token` handoff, gate integration on GitHub Actions checks, and merge via `gh pr merge`.
+_Avoid_: GitHub mode, remote workflow, external PR
+
+**Local Merge**:
+The local-only integration pathway (`local`) in which task worktrees branch from the primary checkout `HEAD`, integrate via local `git merge --no-ff --no-commit`, and never execute `git push` automatically.
+_Avoid_: Direct merge, internal delivery, offline mode
