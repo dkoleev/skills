@@ -14,7 +14,7 @@ The `implement-tasks` skill integrates with complementary engineering workflow s
 
 ## Consequences
 
-- `dkoleev/skills` distributes only its own first-party skills (such as `skills/implement-tasks/`) and does not vendor `mattpocock/skills`. Upstream licensing, attribution, and release cycles remain cleanly decoupled.
-- The repository root in `dkoleev/skills` tracks its own authoring-time skills under `.agents/skills/` (specifically `domain-modeling`, `grill-with-docs`, and `grilling` recorded in `skills-lock.json`) exclusively for developing this repository itself; these authoring-time dependencies are not packaged into or distributed with `skills/implement-tasks/`.
+- `dkoleev/skills` distributes only its own first-party skills (such as `skills/implement-tasks/`, licensed under MIT by Dmitry Koleev) and does not vendor `mattpocock/skills`. Upstream licensing (MIT under Matt Pocock), attribution, and release cycles remain cleanly decoupled.
+- Local checkouts of `dkoleev/skills` may hold authoring-time skills under gitignored `.agents/skills/` (specifically `domain-modeling`, `grill-with-docs`, and `grilling`) used exclusively for developing and maintaining this repository itself; these authoring-time dependencies are not packaged into or distributed with `skills/implement-tasks/`.
 - Target projects install companion skills independently via `skills` CLI commands documented in `README.md`.
 - `implement-tasks` inspects `<repo-root>/.agents/skills/` opportunistically: if `tdd`, `code-review`, or `pr` are present, Workers and Reviewers follow their specialized instructions; otherwise, they follow the built-in red-before-green, two-axis review, and standard PR conventions.

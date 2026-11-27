@@ -64,7 +64,7 @@ npx skills add mattpocock/skills --skill pr
 npx skills add mattpocock/skills --skill retro
 ```
 
-> **Note on authoring-time dependencies:** The `dkoleev/skills` repository root includes a few authoring-time skills under `.agents/skills/` (such as `domain-modeling`, `grill-with-docs`, and `grilling` tracked in `skills-lock.json`) exclusively for developing and maintaining this repository itself. They are not bundled into `skills/implement-tasks/` for downstream users.
+> **Note on authoring-time dependencies:** A maintainer's checkout of `dkoleev/skills` may hold local, gitignored authoring-time skills under `.agents/skills/` (such as `domain-modeling`, `grill-with-docs`, and `grilling`) used exclusively for developing and maintaining this repository itself. They are not bundled into or distributed with `skills/implement-tasks/` for downstream users.
 
 ---
 
