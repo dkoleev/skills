@@ -16,6 +16,18 @@ _Avoid_: Installed harnesses, model catalog
 A description of the tasks a rule covers, together with a list of eligible **Harness** and model combinations from the **Harness Pool**. Each candidate has its own reasoning effort for those tasks.
 _Avoid_: Launch note
 
+**Candidate**:
+A **Harness Pool** combination listed in a **Routing Rule**, with its own reasoning effort and the roles (**Worker**, **Reviewer**, or both) it may fill.
+_Avoid_: Option, slot, route entry
+
+**Launch Note**:
+A project-wide or per-**Harness** instruction for how the **Runner** starts an agent, such as a shell profile or custom endpoint.
+_Avoid_: Launch config, prompt note
+
+**Model Family**:
+The vendor lineage of a model, used to judge whether a **Reviewer** is independent of the **Worker**.
+_Avoid_: Model vendor, model type
+
 **Orchestration Backend**:
 The workspace and terminal multiplexer layer through which a coordinator creates isolated worktrees, launches agent panes, and relays prompts across harnesses.
 _Avoid_: Terminal app, multiplexer, supervisor

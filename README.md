@@ -109,9 +109,9 @@ python "<implement-tasks skill directory>/scripts/routing.py" edit
 
 For the direct terminal command, pass `--policy <path-from-project-root>` before `edit` if your project uses a custom policy file. Press Ctrl+C to stop the editor.
 
-Add a Harness to the pool, then add a model from its catalog, enter an exact ID, or use the Harness default. In each routing rule, assign pool models with their reasoning effort and eligible roles. The Markdown preview updates as you edit. Save with the button or Ctrl+S. The editor reopens `.agents/implement-tasks-routing.json`, which the Runner reads when assigning work. The `Harness Pool & Routing` section of `.agents/implement-tasks-auto-merge.md` reflects the saved settings.
+Add a Harness to the pool, then add a model from its catalog, enter an exact ID, or use the Harness default. In each routing rule, assign pool models with their reasoning effort and eligible roles. The Markdown panel previews the saved section as you edit. Save with the button or Ctrl+S. The editor reopens `.agents/implement-tasks-routing.json`, which the Runner reads when assigning work. The `Harness Pool & Routing` section of `.agents/implement-tasks-auto-merge.md` reflects the saved settings.
 
-On first use, a handwritten routing section appears beside the form. Transfer its policy into routing rules and the project-wide or per-Harness launch notes. Review the preview before saving the replacement section.
+On first use, the Markdown panel opens with the handwritten routing section. Transfer its policy into routing rules and the project-wide or per-Harness launch notes. Review the preview before saving the replacement section.
 
 The Reviewer preference favors a different Harness and known model family when an eligible candidate is available. Correct a model's family in the pool to apply that correction across all rules that use it.
 
