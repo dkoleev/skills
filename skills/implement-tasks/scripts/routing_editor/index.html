@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Harness Routing</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="editor.js" defer></script>
+</head>
+<body>
+  <header class="site-header">
+    <div class="shell"><span class="project" id="project"></span><h1>Harness Routing</h1></div>
+  </header>
+  <main class="shell workspace">
+    <form id="editor">
+      <section class="pool-section" aria-labelledby="pool-title">
+        <div class="section-heading">
+          <h2 id="pool-title">Harness Pool</h2>
+          <div class="controls">
+            <select id="available-harness" aria-label="Harness to add"></select>
+            <button type="button" id="add-harness" disabled>Add Harness</button>
+          </div>
+        </div>
+        <div id="pool" class="stack"></div>
+      </section>
+      <section aria-labelledby="rules-title">
+        <div class="section-heading">
+          <h2 id="rules-title">Routing rules</h2>
+          <button type="button" id="add-rule" disabled>Add rule</button>
+        </div>
+        <div id="rules" class="stack"></div>
+      </section>
+      <section class="panel reviewer" aria-labelledby="reviewer-title">
+        <h2 id="reviewer-title">Reviewer preference</h2>
+        <label class="check"><input type="checkbox" id="prefer-reviewer"> Prefer a different Harness and model family</label>
+      </section>
+      <section class="panel launch-notes" aria-labelledby="notes-title">
+        <h2 id="notes-title">Launch notes</h2>
+        <label>Project-wide launch notes<textarea id="project-notes" rows="4"></textarea></label>
+        <div id="harness-notes" class="stack"></div>
+      </section>
+      <div class="actions">
+        <button type="button" id="preview-button" disabled>Preview Markdown</button>
+        <button type="submit" class="primary" id="save-button" disabled>Save routing</button>
+      </div>
+      <p id="status" role="status"></p>
+    </form>
+    <aside class="stack side-panel">
+      <section class="panel" id="migration" aria-labelledby="migration-title" hidden>
+        <h2 id="migration-title">Existing handwritten routing</h2>
+        <p>Transfer the policy into the form and preview it. Saving replaces this section.</p>
+        <pre id="handwritten" tabindex="0"></pre>
+      </section>
+      <section class="panel preview" aria-labelledby="preview-title">
+        <h2 id="preview-title">Markdown preview</h2>
+        <pre id="preview" tabindex="0"></pre>
+      </section>
+    </aside>
+  </main>
+  <template id="rule-template">
+    <article class="panel rule">
+      <div class="section-heading rule-actions">
+        <h3 class="rule-title"></h3>
+        <div class="controls">
+          <button type="button" data-action="up" aria-label="Move rule up">↑</button>
+          <button type="button" data-action="down" aria-label="Move rule down">↓</button>
+          <button type="button" data-action="remove">Remove rule</button>
+        </div>
+      </div>
+      <div class="fields">
+        <label>Rule name<input name="name" required></label>
+        <label>Task description<textarea name="description" rows="2" required></textarea></label>
+      </div>
+      <div class="section-heading candidates-heading">
+        <h4>Candidates</h4>
+        <button type="button" data-action="add-candidate">Add candidate</button>
+      </div>
+      <p class="empty-rule" hidden>Add a candidate to dispatch work under this rule.</p>
+      <div class="candidates stack"></div>
+    </article>
+  </template>
+  <template id="candidate-template">
+    <fieldset class="candidate">
+      <legend>Candidate</legend>
+      <div class="fields candidate-fields">
+        <label>Pool model<select name="model" required></select></label>
+        <label>Reasoning effort<select name="effort" required></select></label>
+        <label>Role<select name="role"><option value="both">Worker and Reviewer</option><option value="worker">Worker</option><option value="reviewer">Reviewer</option></select></label>
+      </div>
+      <button type="button" data-action="remove-candidate">Remove candidate</button>
+    </fieldset>
+  </template>
+  <template id="harness-template">
+    <article class="panel harness">
+      <div class="section-heading">
+        <h3 class="harness-title"></h3>
+        <button type="button" data-action="remove-harness">Remove Harness</button>
+      </div>
+      <ul class="models"></ul>
+      <label>Model ID<input class="new-model" spellcheck="false" autocomplete="off"></label>
+      <datalist></datalist>
+      <div class="actions model-actions">
+        <button type="button" data-action="add-model">Add model</button>
+        <button type="button" data-action="add-default">Use Harness default</button>
+        <button type="button" data-action="catalog">Refresh catalog</button>
+      </div>
+      <p class="catalog-status" role="status"></p>
+    </article>
+  </template>
+  <dialog id="remove-dialog" aria-labelledby="remove-title">
+    <h2 id="remove-title"></h2>
+    <p id="remove-description"></p>
+    <ul id="affected-rules"></ul>
+    <form method="dialog" class="actions">
+      <button value="cancel" autofocus>Cancel</button>
+      <button value="remove">Remove</button>
+    </form>
+  </dialog>
+</body>
+</html>

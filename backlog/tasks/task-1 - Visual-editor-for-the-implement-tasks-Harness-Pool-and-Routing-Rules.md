@@ -1,9 +1,10 @@
 ---
 id: TASK-1
 title: Visual editor for the implement-tasks Harness Pool and Routing Rules
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-11-27T07:18:44Z'
+updated_date: '2026-11-27T09:25:25Z'
 labels:
   - ready-for-agent
 dependencies: []
@@ -74,9 +75,21 @@ The discussed agy, codex, and claude configurations illustrate a single project'
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 A maintainer can launch the editor from a project, configure its pool, ordered rules, efforts, roles, model families and launch notes, save, and reopen the same settings.
-- [ ] #2 Migration displays existing prose, and saving reproduces the preview in the routing section while preserving other sections.
-- [ ] #3 Removing a harness identifies affected rules, removes its candidates and visibly retains any empty rule for repair.
-- [ ] #4 Runner dispatch respects the first match, per-role eligibility, effort, quota, and invocation filters, and reports when a task must remain queued.
-- [ ] #5 Reviewer selection follows the configured preference and its fallbacks within eligible candidates, including unknown model families.
+- [x] #1 A maintainer can launch the editor from a project, configure its pool, ordered rules, efforts, roles, model families and launch notes, save, and reopen the same settings.
+- [x] #2 Migration displays existing prose, and saving reproduces the preview in the routing section while preserving other sections.
+- [x] #3 Removing a harness identifies affected rules, removes its candidates and visibly retains any empty rule for repair.
+- [x] #4 Runner dispatch respects the first match, per-role eligibility, effort, quota, and invocation filters, and reports when a task must remain queued.
+- [x] #5 Reviewer selection follows the configured preference and its fallbacks within eligible candidates, including unknown model families.
 <!-- AC:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Completed and verified TASK-1.1 through TASK-1.6 in order. Browser coverage included save/reopen, migration and removal impact. The disposable Herdr fixture exercised real Worker and Reviewer launches and Run Record evidence. Eight automated tests cover the editor/Runner workflow, including simulated quota and family fallbacks, and run in CI.
+<!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Added the project-local routing editor and connected its saved configuration to Runner assignment. Existing prose routing remains available for projects without settings. Verified in Chrome, Herdr, and automated workflow and documentation checks.
+<!-- SECTION:FINAL_SUMMARY:END -->

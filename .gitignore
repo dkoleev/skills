@@ -3,3 +3,4 @@
 .grok/
 .zcode/
 skills-lock.json
+__pycache__/

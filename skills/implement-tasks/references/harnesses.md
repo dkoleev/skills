@@ -18,6 +18,38 @@ Discover the Runner's own harness with `hc get "$HC_TERMINAL_ID" --json` (Herdr 
 
 Never hardcode stale model names in prompts or scripts. Inspect live model catalogs or project-documented model tables at run time and only interpolate validated values into launch commands. If a harness does not support `--model` or `--effort` in interactive CLI mode, omit the unsupported flag and rely on that harness's configured default.
 
+## Structured project routing
+
+From the primary checkout, run `python "<implement-tasks skill directory>/scripts/routing.py" rules` once before selecting new work. The command reads `.agents/implement-tasks-routing.json`. JSON `null` selects the existing [prose workflow](#harness-pool-complexity-routing-and-subscription-limits). If Python is unavailable and the file is absent, use the prose workflow directly. Report malformed or unreadable settings and keep new work queued until they can be read.
+
+Compare the task's title, description, and acceptance criteria with each rule's `description`. Pass the matching 1-based positions to `python "<implement-tasks skill directory>/scripts/routing.py" select --role worker --matches <positions>`. For the Reviewer use `--role reviewer` and the same matching positions. Leave `--matches` empty when no descriptions apply. The command applies role eligibility within the first matching rule. Use `assignment` when `status` is `selected`. When `status` is `queued`, display its `reason` in the Status Pane and leave the task queued. If Worker work already exists, keep its worktree and evidence and defer review until an eligible assignment exists.
+
+Treat the assignment's `harness`, `model`, and `effort` as data and pass them as separate launch arguments using the [launch matrix](#supported-harnesses-and-launch-matrix). A saved custom model ID is a valid explicit choice. When `model` is JSON `null`, omit the model flag and record the Harness default. For `default` effort, omit the effort flag. If the Harness cannot apply an explicit model through a supported launch or interactive selection, explain the reason and retain the queue entry. Use the actual assignment in the role's `*_harness`, `*_model`, and `*_effort` fields in the Run Record. For a Harness that only supports its default effort, record `default`.
+
+Apply `launch_notes.project` and `launch_notes.harnesses[assignment.harness]` when present. They describe project launch conventions, such as the PowerShell profile or a custom endpoint. Keep the selected assignment and mandatory prompt guardrails in force.
+
+### Runtime restrictions and capacity
+
+For each structured `select`, pass `--runtime` and send a JSON object on stdin. Map an explicit launch restriction such as `codex only` to `allowed_harnesses`. Use `allowed_models` for a restriction on specific Harness/model pairs. Store restrictions in the invocation or Session Record for its lifetime, including retries. A new invocation reads the full project configuration with only its own restrictions.
+
+```json
+{
+  "allowed_harnesses": ["codex"],
+  "harnesses": {"codex": {"active": 1, "capacity": 2}},
+  "models": [{"harness": "codex", "model": "custom-id", "active": 1, "quota_remaining": 1}]
+}
+```
+
+Read active assignments from Run Records and confirm their terminal state in the Orchestration Backend. Count reserved or starting assignments and live work across roles. Supply `active` for each Harness and model in use. Include `capacity`, `quota_remaining`, and `available` when known from local usage clues, enabled Harnesses, launch capabilities, or user limits. An observed throttle sets `quota_remaining` to `0` for the affected Harness or model for the remainder of the invocation. Missing limits leave capacity or quota unknown. `allowed_models` takes a list of `{ "harness": ..., "model": ... }` pairs, using JSON `null` for a Harness default.
+
+Resolve and reserve assignments one at a time in the Runner. Persist the assignment and `phase=starting` in the Run Record before spawning, and count that reservation in the next selection. Advance the record when launch succeeds, or release the reservation on failure. For a structured assignment failure or quota failover, refresh runtime data and select again from the same first matching rule. Keep the task queued with the reported reason if no candidate remains. For an in-flight task, retain its branch, worktree, evidence, and review round.
+
+### Reviewer selection
+
+For structured routing, give `select --role reviewer` the same matching rule positions and runtime restrictions. Include `worker` in the runtime object with the actual `harness`, `model`, and `family` from the Run Record, using JSON `null` for an unresolved Harness default or unknown family. New Reviewers always start in a fresh terminal and session, including fallback Reviewers using the same Harness or model as the Worker.
+
+When the saved preference is enabled, selection ranks a different Harness and known family first, then a different known family. When either family is unknown, a different Harness ranks ahead of the final fallback to any available independent Reviewer. Role, restrictions, availability, and quota always apply. Use the same capacity selection as for Workers within each preference level. Record the actual chosen Harness, model, effort, and known family in the Run Record.
+
 ## Harness pool, complexity routing, and subscription limits
 
 1. **Determine the allowed harness pool:** Read any harness preferences, role assignments (for example, `worker=codex, reviewer=claude`), model mappings, or subscription/quota priorities from the launch prompt, `<repo-root>/.agents/implement-tasks-auto-merge.md` (`## Harness Pool & Routing`), `AGENTS.md`, or `CLAUDE.md`. If none are specified, default the pool to the Runner's own active harness so unauthenticated or unconfigured CLIs are never launched blindly.
