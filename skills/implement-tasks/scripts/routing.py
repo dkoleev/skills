@@ -26,7 +26,7 @@ CONFIG = Path('.agents/implement-tasks-routing.json')
 POLICY = Path('.agents/implement-tasks-auto-merge.md')
 HEADING = '## Harness Pool & Routing'
 ASSETS = Path(__file__).with_name('routing_editor')
-HARNESSES = ('codex', 'claude', 'agy', 'kimi', 'opencode', 'gemini', 'cursor', 'copilot', 'grok', 'pi')
+HARNESSES = ('codex', 'claude', 'agy', 'kimi', 'opencode', 'crush', 'gemini', 'cursor', 'copilot', 'grok', 'pi')
 EFFORTS = ('default', 'low', 'medium', 'high', 'xhigh', 'max')
 ROLES = ('both', 'worker', 'reviewer')
 
@@ -458,6 +458,9 @@ def main():
         root, git_dir = (Path(part).resolve() for part in os.fsdecode(result.stdout).splitlines())
         project = Project(root, arguments.policy, git_dir)
         if arguments.command == 'edit':
+            if arguments.background_server:
+                # Windows keeps a process's working directory locked until it exits.
+                os.chdir(tempfile.gettempdir())
             serve(project, not arguments.no_browser, arguments.background_server)
         elif arguments.command == 'open':
             open_editor(project, not arguments.no_browser)

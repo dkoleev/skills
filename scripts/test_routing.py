@@ -163,8 +163,9 @@ class RoutingWorkflow(unittest.TestCase):
         form = self.request('state')
         discovered = self.request('catalog/claude')['models'][0]
         manual = {'harness': 'claude', 'model': 'custom/Exact-ID'}
-        default = {'harness': 'codex', 'model': None}
-        form['config']['harnesses'] = ['claude', 'codex']
+        default = {'harness': 'crush', 'model': None}
+        self.assertIn('crush', form['harnesses'])
+        form['config']['harnesses'] = ['claude', 'crush']
         form['config']['pool'] = [manual, {'harness': 'claude', 'model': discovered}, default]
         rule = form['config']['rules'][0]
         rule['candidates'] = [{**manual, 'effort': 'medium'}, {**default, 'effort': 'default'}]
@@ -177,7 +178,9 @@ class RoutingWorkflow(unittest.TestCase):
             self.request('save', form)
         rule['candidates'].pop(0)
         form['revision'] = self.request('save', form)['revision']
-        self.assertIsNone(self.selection('worker', 1)['assignment']['model'])
+        assignment = self.selection('worker', 1)['assignment']
+        self.assertEqual(assignment['harness'], 'crush')
+        self.assertIsNone(assignment['model'])
         self.assertIn('Harness default', self.policy.read_text(encoding='utf-8'))
 
     def test_migration_preserves_custom_policy_and_reopens_launch_notes(self):

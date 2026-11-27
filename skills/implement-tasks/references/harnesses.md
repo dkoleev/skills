@@ -2,7 +2,7 @@
 
 ## Supported harnesses and launch matrix
 
-Discover the Runner's own harness with `hc get "$HC_TERMINAL_ID" --json` (Herdr GUI) or `herdr agent get "$HERDR_PANE_ID"` (Herdr TUI), and inspect installed harness CLIs (`codex`, `claude`, `agy`, `kimi`, `opencode`, `gemini`, `cursor`, `copilot`, `grok`, `pi`, and others).
+Discover the Runner's own harness with `hc get "$HC_TERMINAL_ID" --json` (Herdr GUI) or `herdr agent get "$HERDR_PANE_ID"` (Herdr TUI), and inspect installed harness CLIs (`codex`, `claude`, `agy`, `kimi`, `opencode`, `crush`, `gemini`, `cursor`, `copilot`, `grok`, `pi`, and others).
 
 - In **Herdr GUI**, launch via `argv` in `herdr-app do space.new` / `pane.split` (see Windows PowerShell wrapper below when `.ps1` shims or user profile env vars are needed).
 - In **Herdr TUI**, pass native CLI flags after `--` in `herdr agent start <name> --kind <kind> --pane <pane-id> -- <args...>`.
@@ -14,6 +14,7 @@ Discover the Runner's own harness with `hc get "$HC_TERMINAL_ID" --json` (Herdr 
 | `agy` | `--dangerously-skip-permissions` | `--model <model> --effort <low\|medium\|high\|xhigh\|max>` | `agy models` | Native binary. **Herdr caveat:** `agy` can show `idle` while background tasks/subagents continue — always gate on completion line, token, and SHA. |
 | `kimi` | `--auto` | `-m <model>` (no CLI `--effort` flag; send `/effort <level>` + `Enter` after `idle` if needed) | `kimi provider list` / `config.toml` aliases | Native binary. |
 | `opencode` | `--auto` | None in interactive mode (omit model/effort flags unless configured) | `opencode models`; `opencode stats` | Windows may require PowerShell / `.ps1` shim launch. |
+| `crush` | `-y` | Use the configured default or choose **Switch Model** and the supported reasoning effort in the interactive UI before sending the task. Verify the selection in the pane. | `crush models`; `crush stats` | In GUI, launch through `argv`. Choose **Nope** if Crush offers to initialize the project, then wait for the input prompt. In TUI, check `herdr agent start --help` for `crush` before marking the Harness available. Windows may require PowerShell / `.ps1` shim launch. |
 | Other `herdr` kinds (`gemini`, `grok`, `cursor`, etc.) | Check `<kind> --help` for equivalent non-interactive/auto flag | Check `<kind> --help`; omit unsupported flags cleanly | `<kind> --help` | `grok` shares the `agy` Herdr caveat where `idle` does not prove background work finished. |
 
 Never hardcode stale model names in prompts or scripts. Inspect live model catalogs or project-documented model tables at run time and only interpolate validated values into launch commands. If a harness does not support `--model` or `--effort` in interactive CLI mode, omit the unsupported flag and rely on that harness's configured default.
@@ -68,7 +69,7 @@ When the saved preference is enabled, selection ranks a different Harness and kn
 
 ## Windows launch and `.ps1` npm-shim fallback
 
-On Windows, `codex`, `claude`, and `opencode` are commonly installed as npm `.ps1` shims or wrapped by user PowerShell `$PROFILE` settings (such as clearing or setting `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`).
+On Windows, `codex`, `claude`, `opencode`, and `crush` may be installed as npm `.ps1` shims or wrapped by user PowerShell `$PROFILE` settings (such as clearing or setting `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`).
 
 - **In Herdr GUI (`herdr-app do space.new` / `pane.split`):** pass `argv` through PowerShell **without** `-NoProfile`, e.g.:
   ```json

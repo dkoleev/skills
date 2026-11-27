@@ -11,6 +11,7 @@ COMMANDS = {
     'agy': ('models',),
     'kimi': ('provider', 'list', '--json'),
     'opencode': ('models',),
+    'crush': ('models',),
 }
 
 FAMILIES = {
