@@ -8,6 +8,14 @@ Shared vocabulary for authoring and operating multi-harness coding-agent skills 
 A specific coding-agent runtime and interface (such as Codex, Claude Code, Antigravity, Kimi Code, or OpenCode) that executes prompts inside a terminal session.
 _Avoid_: Agent tool, CLI wrapper, model
 
+**Harness Pool**:
+The set of **Harness** and model combinations a project makes available to its **Runner** for implementation and review.
+_Avoid_: Installed harnesses, model catalog
+
+**Routing Rule**:
+A description of the tasks a rule covers, together with a list of eligible **Harness** and model combinations from the **Harness Pool**. Each candidate has its own reasoning effort for those tasks.
+_Avoid_: Launch note
+
 **Orchestration Backend**:
 The workspace and terminal multiplexer layer through which a coordinator creates isolated worktrees, launches agent panes, and relays prompts across harnesses.
 _Avoid_: Terminal app, multiplexer, supervisor

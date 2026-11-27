@@ -127,3 +127,4 @@ Orchestrates an entire implementation queue from your primary Git checkout insid
   - [ADR-0005: Post-Diff Review Gate for Trivial Tasks and Orthogonal `--no-review` Mode](docs/adr/0005-review-gate-trivial-skip-and-no-review-mode.md)
   - [ADR-0006: External Companion Skills Installation and Opportunistic Integration](docs/adr/0006-external-companion-skills-installation.md)
   - [ADR-0007: GitHub PR Delivery Mode and Continuous Integration Gate](docs/adr/0007-pr-delivery-mode-and-ci-gate.md)
+  - [ADR-0008: Project Harness Routing Configuration](docs/adr/0008-project-harness-routing-configuration.md)
