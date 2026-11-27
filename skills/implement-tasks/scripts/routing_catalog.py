@@ -15,6 +15,8 @@ COMMANDS = {
 }
 
 EFFORTS = ('default', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra')
+# Opus 5.5, Sonnet 5.5, and Haiku 5.5 behind the Claude Code aliases all accept these.
+CLAUDE_EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
 EFFORT_NAME = re.compile(r'\((low|medium|high|xhigh|max|ultra)\)$', re.IGNORECASE)
 
 FAMILIES = {
@@ -63,7 +65,7 @@ def known_efforts(levels):
 def catalog(harness, root):
     """Return {model ID: supported efforts, or None when the catalog does not say}."""
     if harness == 'claude':
-        return dict.fromkeys(['haiku', 'sonnet', 'opus'])
+        return dict.fromkeys(['haiku', 'sonnet', 'opus'], list(CLAUDE_EFFORTS))
     if harness not in COMMANDS:
         return {}
     binary = shutil.which(harness)

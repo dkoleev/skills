@@ -16,6 +16,8 @@ Or install a single skill:
 npx skills add dkoleev/skills --skill implement-tasks
 ```
 
+> **Crush:** Crush writes `.crush/.gitignore` containing `*`, so skills installed under `.crush/` are ignored by Git. Commit them with `git add -f .crush/skills/<skill>` if you want them tracked.
+
 ## Skills Catalog
 
 | Skill | What it does | Core requirements | Guide |
@@ -109,7 +111,7 @@ python "<implement-tasks skill directory>/scripts/routing.py" edit
 
 For the direct terminal command, pass `--policy <path-from-project-root>` before `edit` if your project uses a custom policy file. Press Ctrl+C to stop the editor.
 
-Add a Harness to the pool, then add a model from its catalog, enter an exact ID, or use the Harness default. In each routing rule, assign pool models with their reasoning effort and eligible roles. The Markdown panel previews the saved section as you edit. Save with the button or Ctrl+S. The editor reopens `.agents/implement-tasks-routing.json`, which the Runner reads when assigning work. The `Harness Pool & Routing` section of `.agents/implement-tasks-auto-merge.md` reflects the saved settings.
+Add a Harness to the pool, then add a model from its catalog, enter an exact ID, or use the Harness default. In each routing rule, assign pool models with their reasoning effort and eligible roles. The Runner picks a rule by its description, so rewrite the sample descriptions for your project. When several rules match, the first one wins: put narrower rules above broader ones. A Worker candidate can name a higher effort for retries, applied from Correction Round 2. The editor warns about candidates that can never be selected, sample descriptions, and Claude models on a custom endpoint without a set family. The Markdown panel previews the saved section as you edit. Save with the button or Ctrl+S. The editor reopens `.agents/implement-tasks-routing.json`, which the Runner reads when assigning work. The `Harness Pool & Routing` section of `.agents/implement-tasks-auto-merge.md` reflects the saved settings.
 
 On first use, the Markdown panel opens with the handwritten routing section. Transfer its policy into routing rules and the project-wide or per-Harness launch notes. Review the preview before saving the replacement section.
 

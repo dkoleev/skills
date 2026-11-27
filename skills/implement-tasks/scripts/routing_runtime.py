@@ -16,6 +16,7 @@ class Usage:
     capacity: int | None = None
     quota_remaining: int | None = None
     available: bool = True
+    assigned: int = 0
 
     @classmethod
     def parse(cls, data):
@@ -25,11 +26,12 @@ class Usage:
         capacity = data.get('capacity')
         quota = data.get('quota_remaining')
         available = data.get('available', True)
-        if type(active) is not int or active < 0 or type(available) is not bool:
-            raise ValueError('Runtime usage requires a nonnegative active count and boolean availability.')
+        assigned = data.get('assigned', 0)
+        if any(type(value) is not int or value < 0 for value in (active, assigned)) or type(available) is not bool:
+            raise ValueError('Runtime usage requires nonnegative active and assigned counts and boolean availability.')
         if any(value is not None and (type(value) is not int or value < 0) for value in (capacity, quota)):
             raise ValueError('Runtime capacity and remaining quota must be nonnegative integers or null.')
-        return cls(active, capacity, quota, available)
+        return cls(active, capacity, quota, available, assigned)
 
     def has_capacity(self):
         return self.capacity is None or self.active < self.capacity
@@ -88,3 +90,11 @@ class Runtime:
 
     def load(self, candidate):
         return tuple(usage.active for usage in self.usage(candidate))
+
+    def quota(self, candidate):
+        # Known remaining quota ranks ahead of unknown quota, larger first.
+        known = [usage.quota_remaining for usage in self.usage(candidate) if usage.quota_remaining is not None]
+        return (0, -min(known)) if known else (1, 0)
+
+    def assigned(self, candidate):
+        return tuple(usage.assigned for usage in self.usage(candidate))

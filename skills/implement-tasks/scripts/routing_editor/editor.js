@@ -17,6 +17,7 @@ const preferReviewer = $('#prefer-reviewer');
 const migration = $('#migration');
 const drawer = $('#drawer');
 const markdownButton = $('#toggle-markdown');
+const warnings = $('#warnings');
 const DEFAULT_MODEL = 'Harness default';
 const catalogs = new Map();
 const catalogStatus = new Map();
@@ -326,13 +327,28 @@ function candidateRow(rule, number, candidate, index, focus) {
     if (!allowedEfforts(entry).includes(candidate.effort)) candidate.effort = 'default';
     renderRules(candidate);
   });
-  options(row.querySelector('[name="effort"]'), allowedEfforts(poolEntry(candidate)));
-  connectField(row, candidate, 'effort');
+  const allowed = allowedEfforts(poolEntry(candidate));
+  options(row.querySelector('[name="effort"]'), allowed);
+  const effort = connectField(row, candidate, 'effort');
+  const escalate = row.querySelector('[name="escalate_to"]');
+  const fillEscalate = () => {
+    const higher = allowed.slice(allowed.indexOf(candidate.effort) + 1).filter(level => level !== 'default');
+    if (!higher.includes(candidate.escalate_to) || candidate.role === 'reviewer') delete candidate.escalate_to;
+    escalate.replaceChildren(new Option('no retry', ''), ...higher.map(level => new Option(`→ ${level}`, level)));
+    escalate.value = candidate.escalate_to ?? '';
+    escalate.disabled = !higher.length || candidate.role === 'reviewer';
+  };
+  escalate.addEventListener('input', () => {
+    if (escalate.value) candidate.escalate_to = escalate.value;
+    else delete candidate.escalate_to;
+  });
+  effort.addEventListener('input', fillEscalate);
   candidate.role ??= 'both';
+  fillEscalate();
   for (const radio of row.querySelectorAll('.segmented input')) {
     radio.name = `role-${number}-${index}`;
     radio.checked = radio.value === candidate.role;
-    radio.addEventListener('input', () => { candidate.role = radio.value; });
+    radio.addEventListener('input', () => { candidate.role = radio.value; fillEscalate(); });
   }
   const move = offset => { swap(rule.candidates, index, offset); renderRules(candidate); };
   labelled(onAction(row, 'up', () => move(-1)), `Move ${place} up`).disabled = index === 0;
@@ -396,6 +412,13 @@ function payload() {
   return {config: state.config, revision: state.revision};
 }
 
+function showPreview(data) {
+  preview.textContent = data.markdown;
+  delete preview.dataset.stale;
+  warnings.replaceChildren(...data.warnings.map(text => element('li', '', text)));
+  warnings.hidden = !data.warnings.length;
+}
+
 async function refreshPreview() {
   const id = ++previewRequest;
   if (!editor.checkValidity()) {
@@ -405,8 +428,7 @@ async function refreshPreview() {
   try {
     const data = await request('preview', payload());
     if (id !== previewRequest) return;
-    preview.textContent = data.markdown;
-    delete preview.dataset.stale;
+    showPreview(data);
     showStatus('');
   } catch (error) {
     if (id === previewRequest) showStatus(error.message, true);
@@ -434,8 +456,7 @@ async function save() {
       state.revision = (await request('state')).revision;
       data = await request('save', payload());
     }
-    preview.textContent = data.markdown;
-    delete preview.dataset.stale;
+    showPreview(data);
     state.revision = data.revision;
     savedConfig = JSON.stringify(state.config);
     unsaved.hidden = true;

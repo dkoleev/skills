@@ -11,6 +11,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+sys.dont_write_bytecode = True
+
 
 ROUTING = Path(__file__).resolve().parents[1] / 'skills/implement-tasks/scripts/routing.py'
 POLICY = '.agents/implement-tasks-auto-merge.md'
@@ -198,6 +200,50 @@ class RoutingWorkflow(unittest.TestCase):
             self.request('save', form)
         self.assertEqual(stale.exception.code, 409)
 
+    def test_tie_breaks_escalation_and_editor_warnings(self):
+        self.start_editor()
+        form = self.request('state')
+        config = form['config']
+        self.assertTrue(all('sample description' in text for text in self.request('preview', form)['warnings']))
+        self.assertEqual(self.request('catalog/claude')['efforts']['opus'], ['low', 'medium', 'high', 'xhigh', 'max'])
+        codex = {'harness': 'codex', 'model': 'gpt-test'}
+        claude = {'harness': 'claude', 'model': 'opus'}
+        config['harnesses'] = ['codex', 'claude']
+        config['pool'] = [codex, claude]
+        for rule in config['rules']:
+            rule['description'] = f"Project tasks for {rule['name']}."
+        rule = config['rules'][0]
+        rule['candidates'] = [{**codex, 'effort': 'low', 'escalate_to': 'xhigh'}, {**claude, 'effort': 'high'}]
+        saved = self.request('save', form)
+        form['revision'] = saved['revision']
+        self.assertIn('effort low · escalate to xhigh · both', saved['markdown'])
+        self.assertEqual(saved['warnings'], [])
+        self.assertEqual(self.selection('worker', 1)['assignment']['escalate_to'], 'xhigh')
+        quota = {'models': [{**codex, 'quota_remaining': 3}, {**claude, 'quota_remaining': 9}]}
+        self.assertEqual(self.selection('worker', 1, runtime=quota)['assignment']['harness'], 'claude')
+        rotation = {'models': [{**codex, 'assigned': 2}, {**claude, 'assigned': 1}]}
+        self.assertEqual(self.selection('worker', 1, runtime=rotation)['assignment']['harness'], 'claude')
+        rotation['models'][1]['active'] = 1
+        self.assertEqual(self.selection('worker', 1, runtime=rotation)['assignment']['harness'], 'codex')
+
+        def rejected(message):
+            with self.assertRaises(HTTPError) as error:
+                self.request('preview', form)
+            self.assertIn(message, json.load(error.exception)['error'])
+
+        rule['candidates'][0]['escalate_to'] = 'low'
+        rejected('cannot escalate')
+        rule['candidates'][0].update(escalate_to='xhigh', role='reviewer')
+        rejected('Workers only')
+        rule['candidates'] = [{**codex, 'effort': 'low', 'role': 'worker'}, {**codex, 'effort': 'high'}]
+        config['launch_notes'] = {'project': '', 'harnesses': {'claude': 'Set ANTHROPIC_BASE_URL to the z.ai endpoint.'}}
+        found = self.request('preview', form)['warnings']
+        self.assertTrue(any('never selected as worker because' in text for text in found))
+        self.assertTrue(any('custom endpoint' in text and 'opus' in text for text in found))
+        config['pool'][1]['family'] = 'GLM'
+        self.assertFalse(any('custom endpoint' in text for text in self.request('preview', form)['warnings']))
+        self.assertFalse((ROUTING.parent / '__pycache__').exists())
+
     def test_agy_catalog_merges_effort_variants(self):
         sys.path.insert(0, str(ROUTING.parent))
         from routing_catalog import merge_variants
@@ -299,7 +345,7 @@ class RoutingWorkflow(unittest.TestCase):
         second['candidates'] = [{**cross_vendor, **reviewer}]
         saved = self.request('save', form)
         form['revision'] = saved['revision']
-        self.assertIn('family ` Claude `', saved['markdown'])
+        self.assertIn('family `Claude`', saved['markdown'])
         self.assertEqual(self.request('family', {'model': worker['model']})['family'], 'GPT')
         self.assertEqual(self.request('state')['config'], config)
         runtime = {'worker': worker, 'harnesses': {'claude': {'active': 2}}}

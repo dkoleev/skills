@@ -95,6 +95,7 @@ button.primary #unsaved { color: var(--accent-text); }
 .toggle { display: flex; align-items: center; gap: .35rem; color: var(--muted); cursor: pointer; }
 .toggle input { accent-color: var(--accent); }
 #rules { display: grid; gap: .5rem; }
+.warnings { list-style: '⚠ '; padding-left: 1.2rem; color: var(--warn); font-size: .85rem; display: grid; gap: .15rem; }
 .rule { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: .45rem .7rem .5rem; }
 .rule-head { display: flex; align-items: center; gap: .4rem; }
 .rule-number { color: var(--muted); font-variant-numeric: tabular-nums; min-width: 1.2rem; }
@@ -106,7 +107,7 @@ button.primary #unsaved { color: var(--accent-text); }
   min-height: 1.6rem; color: var(--muted); }
 .candidates, .empty-rule, .rule .link { margin-left: 1.6rem; }
 .candidates { display: grid; gap: .25rem; }
-.candidate { display: grid; grid-template-columns: minmax(12rem, 1fr) 6.5rem auto auto; gap: .4rem; align-items: center; }
+.candidate { display: grid; grid-template-columns: minmax(12rem, 1fr) 6.5rem 6.5rem auto auto; gap: .4rem; align-items: center; }
 .segmented { display: flex; border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
 .segmented label { position: relative; padding: .2rem .55rem; cursor: pointer; color: var(--muted); font-size: .85rem; }
 .segmented label + label { border-left: 1px solid var(--border); }

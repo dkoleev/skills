@@ -35,7 +35,8 @@
           <label class="toggle"><input type="checkbox" id="prefer-reviewer"> Independent Reviewer</label>
           <button type="button" id="add-rule" disabled>+ Rule</button>
         </div>
-        <p class="hint">Rules are checked top to bottom; the first rule whose description matches a task is used. Within a rule, the earlier Candidate wins when load is equal. Independent Reviewer prefers a different Harness and Model Family than the Worker.</p>
+        <p class="hint">Rules are checked top to bottom; the first rule whose description matches a task is used. Put narrower rules above broader ones. Within a rule, equal-load Candidates are ordered by remaining quota, then by fewest assignments. Independent Reviewer prefers a different Harness and Model Family than the Worker.</p>
+        <ul id="warnings" class="warnings" aria-label="Warnings" hidden></ul>
         <div id="rules"></div>
       </main>
     </form>
@@ -93,6 +94,7 @@
     <div class="candidate" role="group">
       <select name="model" required aria-label="Pool model"></select>
       <select name="effort" required aria-label="Reasoning effort"></select>
+      <select name="escalate_to" aria-label="Worker effort from Correction Round 2" title="Worker effort from Correction Round 2"></select>
       <div class="segmented" role="radiogroup" aria-label="Role">
         <label><input type="radio" value="worker">Worker</label>
         <label><input type="radio" value="reviewer">Reviewer</label>

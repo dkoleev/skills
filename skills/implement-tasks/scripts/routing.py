@@ -14,6 +14,9 @@ import sys
 import tempfile
 import threading
 import webbrowser
+
+sys.dont_write_bytecode = True
+
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -116,6 +119,13 @@ def validate(config):
             require(candidate['effort'] in model_efforts(entry),
                     f"{candidate['harness']} · {model_label(candidate['model'])} does not support"
                     f" {candidate['effort']} reasoning effort.")
+            escalate = candidate.get('escalate_to')
+            require(escalate is None or (escalate in model_efforts(entry)
+                                         and EFFORTS.index(escalate) > EFFORTS.index(candidate['effort'])),
+                    f"{candidate['harness']} · {model_label(candidate['model'])} cannot escalate"
+                    f" from {candidate['effort']} to {escalate}.")
+            require(escalate is None or candidate.get('role', 'both') != 'reviewer',
+                    'Effort escalation applies to Workers only.')
             key = (candidate['harness'], candidate['model'], candidate['effort'], candidate.get('role', 'both'))
             require(key not in seen, f"Rule {rule['name']!r} lists the same candidate twice.")
             seen.add(key)
@@ -131,7 +141,38 @@ def validate(config):
 def inline(value):
     longest = max((len(run) for run in re.findall(r'`+', value)), default=0)
     fence = '`' * (longest + 1)
-    return f'{fence} {value} {fence}'
+    pad = ' ' if value[:1] == '`' or value[-1:] == '`' or (value[:1] == value[-1:] == ' ' and value.strip()) else ''
+    return f'{fence}{pad}{value}{pad}{fence}'
+
+
+CUSTOM_ENDPOINT = re.compile(r'ANTHROPIC_BASE_URL|endpoint|https?://', re.IGNORECASE)
+
+
+def warnings(config):
+    found = []
+    samples = {rule['description'] for rule in default_config()['rules']}
+    for rule in config['rules']:
+        name = rule['name']
+        if rule['description'].strip() in samples:
+            found.append(f'Rule {name!r} keeps the sample description. The Runner picks rules by description,'
+                         " so describe this project's tasks.")
+        for index, candidate in enumerate(rule['candidates']):
+            role = candidate.get('role', 'both')
+            dead = [part for part in ROLES[1:] if role in ('both', part) and any(
+                pair(earlier) == pair(candidate) and earlier.get('role', 'both') in ('both', part)
+                for earlier in rule['candidates'][:index])]
+            if dead:
+                found.append(f"Rule {name!r}: {candidate['harness']} · {model_label(candidate['model'])}"
+                             f" · {candidate['effort']} is never selected as {' or '.join(dead)} because an earlier"
+                             ' Candidate uses the same model. Set a retry effort on that Candidate instead.')
+    note = config.get('launch_notes', {}).get('harnesses', {}).get('claude', '')
+    if os.environ.get('ANTHROPIC_BASE_URL') or CUSTOM_ENDPOINT.search(note):
+        unset = [model_label(entry['model']) for entry in config['pool']
+                 if entry['harness'] == 'claude' and not entry.get('family')]
+        if unset:
+            found.append(f"claude may use a custom endpoint, so the detected Model Family of {', '.join(unset)}"
+                         ' may be wrong. Set the family on the pool model.')
+    return found
 
 
 def model_label(model):
@@ -167,6 +208,7 @@ def markdown(config, newline):
         description = ' '.join(part.strip() for part in rule['description'].splitlines() if part.strip())
         lines.append(f"{index}. {inline(rule['name'])} · {inline(description)}")
         lines.extend(f"   - {inline(row['harness'])} · {show_model(row['model'])} · effort {row['effort']}"
+                     f"{' · escalate to ' + row['escalate_to'] if row.get('escalate_to') else ''}"
                      f" · {row.get('role', 'both')}"
                      for row in rule['candidates'])
         if not rule['candidates']:
@@ -217,7 +259,8 @@ def select(config, matches, role, runtime):
     worker_family = worker and (worker.get('family') or families.get(pair(worker)) or detected_family(worker['model']))
 
     def priority(candidate):
-        return (reviewer_rank(candidate, families[pair(candidate)], worker, worker_family), *runtime.load(candidate))
+        return (reviewer_rank(candidate, families[pair(candidate)], worker, worker_family), *runtime.load(candidate),
+                runtime.quota(candidate), *runtime.assigned(candidate))
 
     candidate = min(eligible, key=priority)
     assignment = {**candidate, 'family': families[pair(candidate)]}
@@ -362,7 +405,7 @@ class Project:
                         atomic_write(self.policy, old_policy)
                     raise
                 _, _, revision = self.snapshot()
-        return {'markdown': preview, 'revision': revision}
+        return {'markdown': preview, 'revision': revision, 'warnings': warnings(config)}
 
 
 def serve(project, open_browser, background=False):
