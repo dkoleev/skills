@@ -20,6 +20,7 @@ const markdownButton = $('#toggle-markdown');
 const DEFAULT_MODEL = 'Harness default';
 const catalogs = new Map();
 const catalogStatus = new Map();
+const catalogEfforts = new Map();
 const loadingCatalogs = new Set();
 const families = new Map();
 const collapsed = new Set();
@@ -88,6 +89,16 @@ function modelFamily(entry) {
   return entry.family || families.get(entry.model);
 }
 
+function allowedEfforts(entry) {
+  if (entry.efforts?.length) return ['default', ...entry.efforts];
+  if (entry.harness === 'agy' && /-(?:low|medium|high|xhigh|max|ultra)$/.test(entry.model ?? '')) return ['default'];
+  return state.efforts[entry.harness];
+}
+
+function poolEntry(candidate) {
+  return state.config.pool.find(entry => entry.harness === candidate.harness && entry.model === candidate.model);
+}
+
 function swap(items, index, offset) {
   [items[index], items[index + offset]] = [items[index + offset], items[index]];
 }
@@ -153,8 +164,9 @@ async function loadCatalog(harness) {
   const sync = () => { const panel = harnessPanel(harness); if (panel) showCatalog(panel, harness); };
   sync();
   try {
-    const {models: ids, families: known} = await request(`catalog/${harness}`);
+    const {models: ids, families: known, efforts} = await request(`catalog/${harness}`);
     catalogs.set(harness, ids);
+    catalogEfforts.set(harness, efforts);
     for (const [id, family] of Object.entries(known)) families.set(id, family);
     catalogStatus.set(harness, ids.length ? `${ids.length} models in suggestions.`
       : 'No catalog. Type an exact model ID.');
@@ -178,6 +190,7 @@ function modelRow(harness, entry) {
   const item = element('li');
   const label = modelLabel(entry.model);
   const name = element('span', entry.model === null ? 'model-id default' : 'model-id', label);
+  name.title = `Efforts: ${allowedEfforts(entry).join(', ')}`;
   const badge = element('button', 'badge');
   badge.type = 'button';
   familyBadge(badge, entry);
@@ -233,7 +246,8 @@ function harnessGroup(harness) {
       message.textContent = model === '' ? 'Type a model ID, then press Enter.' : 'This model is already in the pool.';
       return;
     }
-    state.config.pool.push({harness, model});
+    const levels = model && catalogEfforts.get(harness)?.[model];
+    state.config.pool.push(levels ? {harness, model, efforts: levels} : {harness, model});
     renderPool(harness);
     renderRules();
     if (model === null || families.has(model)) return;
@@ -309,10 +323,10 @@ function candidateRow(rule, number, candidate, index, focus) {
     const entry = state.config.pool[model.value];
     candidate.harness = entry.harness;
     candidate.model = entry.model;
-    if (!state.efforts[entry.harness].includes(candidate.effort)) candidate.effort = 'default';
+    if (!allowedEfforts(entry).includes(candidate.effort)) candidate.effort = 'default';
     renderRules(candidate);
   });
-  options(row.querySelector('[name="effort"]'), state.efforts[candidate.harness]);
+  options(row.querySelector('[name="effort"]'), allowedEfforts(poolEntry(candidate)));
   connectField(row, candidate, 'effort');
   candidate.role ??= 'both';
   for (const radio of row.querySelectorAll('.segmented input')) {

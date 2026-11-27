@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from routing_catalog import detected_family, model_ids
+from routing_catalog import EFFORTS, catalog, detected_family
 from routing_runtime import Runtime, pair
 
 
@@ -27,8 +27,9 @@ POLICY = Path('.agents/implement-tasks-auto-merge.md')
 HEADING = '## Harness Pool & Routing'
 ASSETS = Path(__file__).with_name('routing_editor')
 HARNESSES = ('codex', 'claude', 'agy', 'kimi', 'opencode', 'crush', 'gemini', 'cursor', 'copilot', 'grok', 'pi')
-EFFORTS = ('default', 'low', 'medium', 'high', 'xhigh', 'max')
-HARNESS_EFFORTS = {'codex': EFFORTS[:4], 'opencode': EFFORTS[:1]}
+HARNESS_EFFORTS = {'opencode': EFFORTS[:1]}
+DEFAULT_EFFORTS = EFFORTS[:-1]
+EFFORT_VARIANT = re.compile(r'-(?:low|medium|high|xhigh|max|ultra)$')
 ROLES = ('both', 'worker', 'reviewer')
 
 
@@ -63,7 +64,15 @@ def model_id(value):
 
 
 def efforts(harness):
-    return HARNESS_EFFORTS.get(harness, EFFORTS)
+    return HARNESS_EFFORTS.get(harness, DEFAULT_EFFORTS)
+
+
+def model_efforts(entry):
+    if entry.get('efforts'):
+        return ('default', *entry['efforts'])
+    if entry['harness'] == 'agy' and entry['model'] and EFFORT_VARIANT.search(entry['model']):
+        return EFFORTS[:1]
+    return efforts(entry['harness'])
 
 
 class Conflict(ValueError):
@@ -78,15 +87,19 @@ def validate(config):
     harnesses = config.get('harnesses', HARNESSES)
     require(isinstance(harnesses, (list, tuple)) and all(harness in HARNESSES for harness in harnesses)
             and len(set(harnesses)) == len(harnesses), 'The pool needs distinct supported Harnesses.')
-    pool = set()
+    pool = {}
     for model in config['pool']:
         require(isinstance(model, dict) and model.get('harness') in harnesses
                 and 'model' in model and model_id(model['model']),
                 'Each pool entry needs a supported Harness and a model ID.')
         require(model.get('family') is None or line(model['family']), 'Model family must be a single line.')
+        listed = model.get('efforts')
+        require(listed is None or (isinstance(listed, list) and listed and len(set(listed)) == len(listed)
+                                   and all(effort in EFFORTS[1:] for effort in listed)),
+                'Model efforts must be distinct supported reasoning efforts.')
         pair = (model['harness'], model['model'])
         require(pair not in pool, 'Duplicate Harness and model in the pool.')
-        pool.add(pair)
+        pool[pair] = model
     for rule in config['rules']:
         require(isinstance(rule, dict) and line(rule.get('name')) and isinstance(rule.get('description'), str)
                 and all(line(part) for part in rule['description'].splitlines() if part.strip())
@@ -99,8 +112,10 @@ def validate(config):
                     and (candidate['harness'], candidate['model']) in pool and candidate.get('effort') in EFFORTS
                     and candidate.get('role', 'both') in ROLES,
                     'Each candidate needs a pool model, supported effort, and eligible role.')
-            require(candidate['effort'] in efforts(candidate['harness']),
-                    f"{candidate['harness']} does not support {candidate['effort']} reasoning effort.")
+            entry = pool[candidate['harness'], candidate['model']]
+            require(candidate['effort'] in model_efforts(entry),
+                    f"{candidate['harness']} · {model_label(candidate['model'])} does not support"
+                    f" {candidate['effort']} reasoning effort.")
             key = (candidate['harness'], candidate['model'], candidate['effort'], candidate.get('role', 'both'))
             require(key not in seen, f"Rule {rule['name']!r} lists the same candidate twice.")
             seen.add(key)
@@ -117,6 +132,10 @@ def inline(value):
     longest = max((len(run) for run in re.findall(r'`+', value)), default=0)
     fence = '`' * (longest + 1)
     return f'{fence} {value} {fence}'
+
+
+def model_label(model):
+    return 'Harness default' if model is None else model
 
 
 def show_model(model):
@@ -136,6 +155,8 @@ def markdown(config, newline):
         for entry in models:
             family = effective_family(entry)
             suffix = f' · family {inline(family)}' if family else ''
+            if entry.get('efforts'):
+                suffix += f" · efforts {', '.join(entry['efforts'])}"
             lines.append(f"  - {show_model(entry['model'])}{suffix}")
         if not models:
             lines.append('  - No models configured.')
@@ -382,8 +403,10 @@ def serve(project, open_browser, background=False):
                 harness = route.removeprefix('catalog/')
                 try:
                     require(harness in HARNESSES, 'Unknown Harness.')
-                    ids = model_ids(harness, project.root)
-                    self.respond_json({'models': ids, 'families': {model: detected_family(model) for model in ids}})
+                    models = catalog(harness, project.root)
+                    self.respond_json({'models': list(models),
+                                       'families': {model: detected_family(model) for model in models},
+                                       'efforts': {model: levels for model, levels in models.items() if levels}})
                 except ValueError as error:
                     self.respond_json({'error': str(error)}, 400)
                 return

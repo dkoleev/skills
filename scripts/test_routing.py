@@ -162,11 +162,11 @@ class RoutingWorkflow(unittest.TestCase):
         self.start_editor()
         form = self.request('state')
         self.assertEqual(form['policy'], POLICY)
-        self.assertNotIn('xhigh', form['efforts']['codex'])
+        self.assertIn('xhigh', form['efforts']['codex'])
         self.assertEqual(form['efforts']['opencode'], ['default'])
         codex = {'harness': 'codex', 'model': 'gpt-test'}
         config = form['config']
-        config['harnesses'] = ['codex']
+        config['harnesses'] = ['codex', 'agy', 'opencode']
         rule = config['rules'][0]
 
         def rejected(message):
@@ -177,9 +177,19 @@ class RoutingWorkflow(unittest.TestCase):
 
         config['pool'] = [{'harness': 'codex', 'model': ' gpt-test '}]
         rejected('model ID')
-        config['pool'] = [codex]
-        rule['candidates'] = [{**codex, 'effort': 'xhigh'}]
-        rejected('codex does not support xhigh')
+        opus = {'harness': 'agy', 'model': 'claude-opus-test', 'efforts': ['low', 'medium', 'high']}
+        variant = {'harness': 'agy', 'model': 'gemini-test-high'}
+        opencode = {'harness': 'opencode', 'model': None}
+        pick = lambda entry, effort: {'harness': entry['harness'], 'model': entry['model'], 'effort': effort}
+        config['pool'] = [codex, opus, variant, opencode]
+        for entry, effort in ((opus, 'xhigh'), (variant, 'high'), (opencode, 'low')):
+            rule['candidates'] = [pick(entry, effort)]
+            rejected(f'does not support {effort}')
+        config['pool'][1]['efforts'] = ['low', 'low']
+        rejected('Model efforts')
+        config['pool'][1]['efforts'] = ['low', 'medium', 'high']
+        rule['candidates'] = [pick(opus, 'high'), pick(variant, 'default'), pick(codex, 'xhigh')]
+        self.assertIn('efforts low, medium, high', self.request('preview', form)['markdown'])
         rule['candidates'] = [{**codex, 'effort': 'high'}, {**codex, 'effort': 'high', 'role': 'both'}]
         rejected('same candidate twice')
         rule['candidates'][1]['role'] = 'reviewer'
@@ -187,6 +197,14 @@ class RoutingWorkflow(unittest.TestCase):
         with self.assertRaises(HTTPError) as stale:
             self.request('save', form)
         self.assertEqual(stale.exception.code, 409)
+
+    def test_agy_catalog_merges_effort_variants(self):
+        sys.path.insert(0, str(ROUTING.parent))
+        from routing_catalog import merge_variants
+        rows = ['Fetching available models...', 'gemini-x-high	Gemini X (High)', 'gemini-x-low	Gemini X (Low)',
+                'orchestrator	Orchestrator (Carbon)', 'oss-medium	OSS (Medium)', 'odd-name	Odd (High)']
+        self.assertEqual(merge_variants(rows), {'gemini-x': ['high', 'low'], 'orchestrator': None,
+                                                'oss': ['medium'], 'odd-name': None})
 
     def test_pool_supports_catalog_custom_and_default_models(self):
         self.start_editor()
