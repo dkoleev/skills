@@ -20,7 +20,7 @@ Never hardcode stale model names in prompts or scripts. Inspect live model catal
 
 ## Harness pool, complexity routing, and subscription limits
 
-1. **Determine the allowed harness pool:** Read any harness preferences, card field mappings, role assignments (for example, `worker=codex, reviewer=claude`), or subscription/quota priorities from the launch prompt, `AGENTS.md`, or `CLAUDE.md`. If none are specified, default the pool to the Runner's own active harness so unauthenticated or unconfigured CLIs are never launched blindly.
+1. **Determine the allowed harness pool:** Read any harness preferences, role assignments (for example, `worker=codex, reviewer=claude`), model mappings, or subscription/quota priorities from the launch prompt, `<repo-root>/.agents/implement-tasks-auto-merge.md` (`## Harness Pool & Routing`), `AGENTS.md`, or `CLAUDE.md`. If none are specified, default the pool to the Runner's own active harness so unauthenticated or unconfigured CLIs are never launched blindly.
 2. **Select model and effort by complexity — never inherit the Runner's model:**
    - **Mechanical** (boilerplate, renames, small localized edits, docs/config): fast/economical model at `low` reasoning effort.
    - **Typical** (standard features, bug fixes, tests, single-module refactors): fast general-purpose model at `medium` reasoning effort.

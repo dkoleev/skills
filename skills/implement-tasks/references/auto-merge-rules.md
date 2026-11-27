@@ -98,6 +98,11 @@ Use this template when drafting `<repo-root>/.agents/implement-tasks-auto-merge.
 ## Required Checks Before Auto-Merge
 - All task-relevant tests and linters must pass inside the task worktree AND against the combined state (or GitHub Actions PR checks in `pr` mode) before merge commit.
 
+## Harness Pool & Routing *(Optional)*
+- **Allowed pool:** List enabled harnesses for this repository (for example, `codex`, `claude`, `agy`).
+- **Default routing:** Map complexity tiers (`mechanical`, `typical`, `high-risk/architectural`) to preferred harnesses/models, and prefer cross-vendor Reviewers when quota allows.
+- **Launch notes:** Record repo-specific CLI settings (such as custom `claude` endpoint model IDs, `--no-daemon` for `codex` in Herdr GUI, or Windows PowerShell launch notes).
+
 ## Notes
 - In `local` delivery mode, `git push` never runs automatically; pushing requires explicit user authorization.
 - In `pr` delivery mode, the Worker may push `<task_branch>` and open/update the PR only after receiving the Runner's post-review `$ship_token`, and the Runner merges/pulls on GitHub only when CI is green and the Approval Gate allows (`approval=auto` or explicit `approve <task-id>`).

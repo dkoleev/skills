@@ -1,0 +1,17 @@
+name: Docs and Skill Checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run documentation, ADR, glossary, and skill checks
+        run: python3 scripts/check_docs.py

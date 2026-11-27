@@ -38,9 +38,9 @@ When at least one eligible or resumable task exists for the run, open or reuse t
 
 - **Herdr GUI (`backend == "gui"`):**
   1. Check whether `status_terminal_id` in `session.json` is still alive (`hc get "$status_terminal_id" --json`).
-  2. Otherwise locate the Runner's pane ID from `herdr-app ls` (matching `$HC_TERMINAL_ID`) and split right (`direction: "right"`, or `"down"` if the Runner pane is too narrow) with an interactive shell (`["powershell", "-NoLogo"]` on Windows, `["sh"]` on POSIX):
+  2. Otherwise locate the Runner's pane ID from `herdr-app ls` (matching `$HC_TERMINAL_ID`) and split right (`direction: "right"`, or `"down"` if the Runner pane is too narrow) with an interactive shell (`["powershell", "-NoLogo"]` on Windows, `["sh"]` on POSIX). Note: `pane.split` inherits the target pane's folder and does not accept a `folder` argument; on Windows PowerShell, invoke `herdr-app do ...` without capturing stdout into a pipeline variable to avoid Rust `os error 232` pipe-close panics:
      ```sh
-     herdr-app do pane.split '{"direction":"right","pane":"<runner_pane_id>","folder":"<repo_root>","argv":[...]}'
+     herdr-app do pane.split '{"direction":"right","pane":"<runner_pane_id>","argv":[...]}'
      ```
   3. Read `status_pane_id` (`pane`) and `status_terminal_id` (`terminal`) from the JSON response, rename via `herdr-app do pane.rename '{"pane":"<status_pane_id>","name":"implement-tasks-status"}'`, and save both IDs in `session.json`.
   4. Redraw by sending a single self-terminating render command with `hc send "$status_terminal_id" "<clear-and-render-cmd>"`.
@@ -51,7 +51,7 @@ When at least one eligible or resumable task exists for the run, open or reuse t
 
 If the user manually closes the Status Pane later, do not fail the run — keep updating `<git-common-dir>/implement-tasks/status.md` cleanly.
 
-Use **event-driven redraws** (never spawn a background `watch` loop): whenever queue or task state changes (dispatch, `ready`, `review skipped`, review started, correction round increment, `pr_open`, `ci_running`/`ci_failed`/`ci_passed`, quota failover, `pass`, `awaiting approval`, `escalated`, `blocked`, merged & cleaned, `needs attention`), rewrite `<git-common-dir>/implement-tasks/status.md` and run a single self-terminating clear + render command (`glow -p` -> `bat --paging=never --language=markdown` -> `cat` on POSIX or `Clear-Host` + `Get-Content -Raw` on PowerShell).
+Use **event-driven redraws** (never spawn a background `watch` loop): whenever queue or task state changes (dispatch, `ready`, `review skipped`, review started, correction round increment, `pr_open`, `ci_running`/`ci_failed`/`ci_passed`, quota failover, `pass`, `awaiting approval`, `escalated`, `blocked`, merged & cleaned, `needs attention`), rewrite `<git-common-dir>/implement-tasks/status.md` and run a single self-terminating clear + render command (`glow "<status_path>"` -> `bat --paging=never --language=markdown "<status_path>"` -> `cat` on POSIX or `Clear-Host; Get-Content -Raw` on PowerShell; avoid `glow -p` because `-p` opens an interactive pager that blocks the shell).
 
 Include in `status.md`:
 - **Header:** delivery mode (`local` | `pr`), integration mode (`risk-gated auto-merge` + rules file status, or `--handle`), review mode (`default (auto-skip trivial)` or `--no-review`), primary branch, current pinned `base_sha`, active concurrency slots (`X/10`), last updated timestamp, and active/throttled harnesses in the pool.
@@ -78,7 +78,7 @@ Include in `status.md`:
    ```
    Read `space_id` (`space`), `tab_id` (`tab`), `worker_pane_id` (`pane`), and `worker_terminal_id` (`terminal`) from the JSON response and confirm via `herdr-app ls`.
 4. Wait for the Worker to become `idle`, then deliver `$worker_prompt` safely:
-   - Wait via `hc wait "$worker_terminal_id"` or poll `hc get "$worker_terminal_id" --json` until `status.state == "idle"` (abort if `state == "finished"` or `status.state` is `"blocked"` / `"error"`).
+   - Wait via `hc wait "$worker_terminal_id"` or poll `hc get "$worker_terminal_id" --json` until `status.state == "idle"`. If `status.state == "blocked"` on a workspace trust prompt (such as `agy` asking `"Trust this folder?"`), confirm it with `hc keys "$worker_terminal_id" enter` and keep waiting for `idle` (abort if `state == "finished"` or `status.state == "error"`, or another unexpected block).
    - If the Worker harness needs an interactive post-start command (such as `kimi` `/effort <level>`), send it first and wait for `idle` again.
    - Send the prompt with `hc send --if idle "$worker_terminal_id" "$worker_prompt"`. On `status_mismatch`, wait for `idle` and retry.
    - Verify delivery via `hc get "$worker_terminal_id" --json`: if `status.state` remains `idle` after several seconds, inspect `hc read --lines 40 "$worker_terminal_id"` first (never double-paste if the prompt is already in the buffer) and press Enter with `hc keys "$worker_terminal_id" enter` only if the text is sitting unsent in the input box.
@@ -106,9 +106,9 @@ After verifying the Worker's final `ready` report (token, clean worktree, matchi
 herdr-app do pane.split '{"direction":"right","pane":"<worker_pane_id>","argv":[...]}'
 ```
 
-Note: `pane.split` uses the target pane's folder when omitted, which is `$worktree_path`. Read `review_pane_id` (`pane`) and `review_terminal_id` (`terminal`) from the JSON response and confirm via `herdr-app ls` (if a response was lost before retrying, check `herdr-app ls` first).
+Note: `pane.split` uses the target pane's folder when omitted (and rejects `folder` if passed). On Windows PowerShell, invoke `herdr-app do ...` without assigning stdout to a PowerShell pipeline variable (avoids Rust `os error 232` pipe-close panics). Read `review_pane_id` (`pane`) and `review_terminal_id` (`terminal`) from the JSON response and confirm via `herdr-app ls` (if a response was lost before retrying, check `herdr-app ls` first).
 
-Wait for `$review_terminal_id` to reach `idle` via `hc get`/`hc wait`, then send `$review_prompt` via `hc send --if idle "$review_terminal_id" "$review_prompt"`.
+If `pane.split` opens a plain interactive shell instead of launching `argv`, send the Reviewer launch command via `hc send "$review_terminal_id" "<launch-cmd>"`. Wait for `$review_terminal_id` to reach `idle` via `hc get`/`hc wait` (confirming any `"Trust this folder?"` prompt with `hc keys "$review_terminal_id" enter`), then send `$review_prompt` via `hc send --if idle "$review_terminal_id" "$review_prompt"`.
 
 Pass the Reviewer `$base_sha`, `$submitted_sha`, task and acceptance criteria, verification evidence, `$worker_terminal_id` (`$worker_name`), `$worker_pane_id`, `$runner_terminal_id`, `$review_token`, `<repo-root>/.agents/implement-tasks-auto-merge.md` (if present), the two-axis review protocol (matching `.agents/skills/code-review/SKILL.md` when present), `$worktree_path/.implement-tasks/$task_id/review-state.json`, and the mandatory prompt guardrails.
 
@@ -160,7 +160,7 @@ On `pass` (and finished CI check in `pr` mode), `escalated`, OR verified `ready`
 3. **If auto-merge eligible** (`verdict=pass` with `approval=auto` from both Runner and Reviewer, OR verified `ready` with `review_skipped == true` and `approval=auto` from Runner; project rules configured and satisfied; zero verification gaps; green/no-checks CI in `pr` mode; and not `--handle`): Proceed directly to [integration](integration.md) to merge, verify/sync, commit `Done`, clean up the task's space/terminals/worktree/branch, advance `base_sha`, and publish the merge summary + archived artifact links in the Runner's **Status Pane** (`status.md`). Do not open a task-tab Summary Pane when the workspace is auto-cleaned.
 4. **Whenever human approval or intervention is required** (`--handle`, `approval=human`, unconfigured rules safe fallback, `escalated`, CI failure, or merge failure/conflict):
    - Inspect `herdr-app ls` to check layout and split from `$review_pane_id` when a Reviewer pane exists (`right` when width allows 3 readable columns, otherwise `down`), or split from `$worker_pane_id` (`right`, or `down` if narrow) when review was skipped, launching the best available Markdown viewer inside `argv` so the pane stays open and readable without external installs:
-     - Prefer `glow -p "<summary_path>"` if `glow` is installed, else `bat --paging=never --language=markdown "<summary_path>"` if `bat` is installed, else print the file directly and keep the shell open (`["powershell", "-NoExit", "-NoLogo", "-Command", "Get-Content -Raw '<summary_path>'"]` on Windows, or `["sh", "-lc", "cat '<summary_path>'; exec sh"]` on POSIX).
+     - Prefer `glow "<summary_path>"` if `glow` is installed (avoid `glow -p`, which opens an interactive pager), else `bat --paging=never --language=markdown "<summary_path>"` if `bat` is installed, else print the file directly and keep the shell open (`["powershell", "-NoExit", "-NoLogo", "-Command", "Get-Content -Raw '<summary_path>'"]` on Windows, or `["sh", "-lc", "cat '<summary_path>'; exec sh"]` on POSIX).
    - Read `summary_pane_id` (`pane`) and `summary_terminal_id` (`terminal`) from the JSON response.
    - Rename the pane: `herdr-app do pane.rename '{"pane":"<summary_pane_id>","name":"summary-<task-id>"}'`.
    - Save `summary_pane_id`, `summary_terminal_id`, `approval_gate`, and `approval_reason` in `run.json`, refresh `status.md`, redraw the Runner's **Status Pane**, and notify the user explicitly in Runner chat (`TASK-12` needs `approve TASK-12` + reason + PR link if `pr` mode + `summary-TASK-12`).
@@ -186,7 +186,7 @@ When `HC_TERMINAL_ID` is unset and `HERDR_ENV=1`, use `herdr` CLI with `--no-foc
   herdr agent start "$reviewer_name" --kind "$reviewer_kind" --pane "$review_pane" -- <native-flags...>
   herdr agent prompt "$reviewer_name" "$review_prompt"
   ```
-- Open Summary Pane (when staying open under `--handle`, `approval=human`, `escalated`, or merge failure): inspect `herdr pane layout` on `$review_pane` (or `$worker_pane` when `review_skipped == true`), split `--direction right` or `--direction down` with `--cwd "$worktree_path" --no-focus`, rename via `herdr pane rename "$summary_pane" "summary-$task_id"`, save `summary_pane_id` in `run.json`, and run `glow -p` / `bat` / `cat` or `Get-Content -Raw` inside `$summary_pane`.
+- Open Summary Pane (when staying open under `--handle`, `approval=human`, `escalated`, or merge failure): inspect `herdr pane layout` on `$review_pane` (or `$worker_pane` when `review_skipped == true`), split `--direction right` or `--direction down` with `--cwd "$worktree_path" --no-focus`, rename via `herdr pane rename "$summary_pane" "summary-$task_id"`, save `summary_pane_id` in `run.json`, and run `glow` (without `-p`) / `bat` / `cat` or `Get-Content -Raw` inside `$summary_pane`.
 - Read agent output with `herdr agent get` and `herdr agent read <target> --source recent-unwrapped --lines 120` (fall back to `--source visible`).
 
 ---
