@@ -53,7 +53,7 @@ A live pane opened beside the Runner in the primary checkout to display overall 
 _Avoid_: Summary Pane, dashboard tab, log pane
 
 **Summary Pane**:
-A dedicated pane opened inside a task's tab beside the Reviewer (or beside the Worker when review was skipped) when that task stays open for human approval or escalation.
+A dedicated full-width pane opened in an adjacent tab inside a task's space/workspace when that task stays open for human approval or escalation.
 _Avoid_: Status Pane, report tab, output window
 
 **Review Gate**:
